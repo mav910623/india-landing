@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { auth, db } from "@/lib/firebase";
 import { createUserWithEmailAndPassword, updateProfile } from "firebase/auth";
@@ -18,14 +18,14 @@ import {
   limit,
 } from "firebase/firestore";
 
-/** ---------------- ID + Validators ---------------- */
+// Ensure this page is treated dynamically (helps with CSR bailout errors)
+export const dynamic = "force-dynamic";
+export const fetchCache = "force-no-store";
 
-function referralIdFromUid(uid) {
-  return "NU" + uid.slice(0, 6).toUpperCase();
-}
-function randomReferralCandidate() {
-  return "NU" + Math.random().toString(36).substring(2, 8).toUpperCase();
-}
+/* ---------- Helpers (unchanged) ---------- */
+
+function referralIdFromUid(uid) { return "NU" + uid.slice(0, 6).toUpperCase(); }
+function randomReferralCandidate() { return "NU" + Math.random().toString(36).substring(2, 8).toUpperCase(); }
 async function referralIdExists(refId) {
   const qy = query(collection(db, "users"), where("referralId", "==", refId), limit(1));
   const snap = await getDocs(qy);
@@ -40,31 +40,20 @@ async function generateUniqueReferralId(uid) {
   }
   return "NU" + Date.now().toString().slice(-6);
 }
-
-/** Email (simple + solid) */
 const isValidEmail = (e) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(e || "").trim());
-
-/** Password rules: ≥8, 1 uppercase, 1 number */
 const hasMinLen = (p) => String(p || "").length >= 8;
 const hasUpper  = (p) => /[A-Z]/.test(String(p || ""));
 const hasNumber = (p) => /[0-9]/.test(String(p || ""));
 const passwordScore = (p) => [hasMinLen(p), hasUpper(p), hasNumber(p)].filter(Boolean).length;
 
-/** PAN mask + validate */
-function unmaskPan(s) {
-  return String(s || "").replace(/[^A-Za-z0-9]/g, "").toUpperCase();
-}
+function unmaskPan(s) { return String(s || "").replace(/[^A-Za-z0-9]/g, "").toUpperCase(); }
 function constrainPanCore(core) {
   const raw = unmaskPan(core).slice(0, 10);
   let out = "";
   for (let i = 0; i < raw.length && out.length < 10; i++) {
-    const ch = raw[i];
-    const idx = out.length;
-    if (idx <= 4 || idx === 9) {
-      if (/[A-Z]/.test(ch)) out += ch;
-    } else {
-      if (/[0-9]/.test(ch)) out += ch;
-    }
+    const ch = raw[i], idx = out.length;
+    if (idx <= 4 || idx === 9) { if (/[A-Z]/.test(ch)) out += ch; }
+    else { if (/[0-9]/.test(ch)) out += ch; }
   }
   return out;
 }
@@ -75,8 +64,6 @@ function formatPanMasked(core10) {
   return `${c.slice(0,5)}-${c.slice(5,9)}-${c.slice(9)}`;
 }
 const isValidPANCore = (core) => /^[A-Z]{5}[0-9]{4}[A-Z]$/.test(core);
-
-/** ---------------- Phone helpers ---------------- */
 
 const COUNTRIES = [
   { cc: "IN", flag: "🇮🇳", name: "India", dial: "+91",  example: "9876543210" },
@@ -97,7 +84,6 @@ function toE164(dial, local) {
   if (!dialDigits || !digits) return "";
   return `+${dialDigits}${digits}`;
 }
-
 function guessDefaultCountry(local) {
   const digits = String(local || "").replace(/\D/g, "");
   if (digits.length === 10 && /^[6-9]/.test(digits)) {
@@ -106,17 +92,24 @@ function guessDefaultCountry(local) {
   return COUNTRIES[0];
 }
 
-/** ---------------- Component ---------------- */
+/* ---------- Wrapper to satisfy Next.js: Suspense around useSearchParams ---------- */
 
 export default function RegisterPage() {
-  const [step, setStep] = useState(1);
+  return (
+    <Suspense fallback={<div className="min-h-screen flex items-center justify-center text-gray-500">Loading…</div>}>
+      <RegisterPageInner />
+    </Suspense>
+  );
+}
 
-  // Step 1: upline
+/* ---------- The original component logic lives here ---------- */
+
+function RegisterPageInner() {
+  const [step, setStep] = useState(1);
   const [uplineInput, setUplineInput] = useState("");
   const [upline, setUpline] = useState(null);
   const [checkingUpline, setCheckingUpline] = useState(false);
 
-  // Step 2: fields
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [emailTouched, setEmailTouched] = useState(false);
@@ -124,11 +117,9 @@ export default function RegisterPage() {
   const [country, setCountry] = useState(COUNTRIES[0]);
   const [phoneLocal, setPhoneLocal] = useState("");
 
-  // PAN (masked input + core)
-  const [panInput, setPanInput] = useState(""); // masked view (AAAAA-9999-A)
-  const [panCore, setPanCore] = useState("");   // stored view (AAAAA9999A)
+  const [panInput, setPanInput] = useState("");
+  const [panCore, setPanCore] = useState("");
 
-  // Password + UI
   const [password, setPassword] = useState("");
   const [pwVisible, setPwVisible] = useState(false);
 
@@ -139,7 +130,7 @@ export default function RegisterPage() {
   const refLocked = !!searchParams.get("ref");
   const router = useRouter();
 
-  /** Auto-capture ?ref= */
+  // Auto-capture ?ref=
   useEffect(() => {
     const ref = searchParams.get("ref");
     if (!ref) return;
@@ -170,25 +161,24 @@ export default function RegisterPage() {
     })();
   }, [searchParams]);
 
-  /** Bias India if phone looks like 10-digit local */
+  // Bias India if phone looks like 10-digit local
   useEffect(() => {
     if (!phoneLocal) return;
     setCountry((prev) => prev ?? guessDefaultCountry(phoneLocal));
   }, [phoneLocal]);
 
-  /** Email + password derived UI */
   const emailValid = useMemo(() => isValidEmail(email), [email]);
   const pwScore = useMemo(() => passwordScore(password), [password]);
   const pwOk = pwScore === 3;
 
-  /** PAN change (masked) */
+  // PAN mask handling
   function onPanChange(v) {
     const core = constrainPanCore(v);
     setPanCore(core);
     setPanInput(formatPanMasked(core));
   }
 
-  /** Step 1 — Verify upline */
+  // Step 1 — Verify upline
   const checkUpline = async () => {
     setNotice("");
     const id = String(uplineInput || "").trim().toUpperCase();
@@ -218,7 +208,7 @@ export default function RegisterPage() {
     }
   };
 
-  /** Step 2 — Register */
+  // Step 2 — Register
   const registerUser = async () => {
     setNotice("");
 
@@ -232,7 +222,7 @@ export default function RegisterPage() {
     const emailNorm = String(email || "").trim().toLowerCase();
     const rawPhone = String(phoneLocal || "").trim();
     const e164 = toE164(country?.dial, phoneLocal);
-    const panNorm = panCore; // normalized
+    const panNorm = panCore;
 
     if (!nameNorm || !emailNorm || !rawPhone || !panNorm || !password) {
       setNotice("Please fill all fields.");
@@ -259,7 +249,7 @@ export default function RegisterPage() {
     let createdAuthUser = null;
 
     try {
-      // Optional: PAN uniqueness
+      // PAN uniqueness (optional)
       const panQ = query(collection(db, "users"), where("pan", "==", panNorm), limit(1));
       const panSnap = await getDocs(panQ);
       if (!panSnap.empty) {
@@ -285,10 +275,10 @@ export default function RegisterPage() {
         name: nameNorm,
         nameLC: nameNorm.toLowerCase(),
         email: emailNorm,
-        phone: e164,            // WhatsApp-ready
-        phoneRaw: rawPhone,     // original
+        phone: e164,
+        phoneRaw: rawPhone,
         countryCode: country?.dial || "",
-        pan: panNorm,           // stored normalized (no dashes)
+        pan: panNorm,
         referralId,
         upline: upline.id,
         referrals: [],
@@ -322,17 +312,17 @@ export default function RegisterPage() {
     }
   };
 
-  /** Derived UI bits */
   const phoneExample = useMemo(
-    () => country ? `${country.dial} ${country.example}` : "",
+    () => (country ? `${country.dial} ${country.example}` : ""),
     [country]
   );
-  const pwScoreVal = pwScore; // alias for readability
+  const pwScoreVal = pwScore;
+
+  /* ---------- UI ---------- */
 
   return (
     <div className="min-h-screen bg-white">
       <div className="mx-auto max-w-4xl px-4 py-6 sm:py-10">
-        {/* Header */}
         <header className="mb-6 sm:mb-8 text-center">
           <h1 className="text-2xl sm:text-3xl font-semibold tracking-tight text-gray-900">
             India Pre-Registration
@@ -343,7 +333,6 @@ export default function RegisterPage() {
         </header>
 
         <div className="rounded-2xl border border-gray-100 bg-white/80 shadow-sm p-4 sm:p-6">
-          {/* Notice */}
           {notice && (
             <div
               className={
@@ -356,7 +345,6 @@ export default function RegisterPage() {
             </div>
           )}
 
-          {/* STEP 1 — Upline */}
           {step === 1 && (
             <section>
               <label className="block text-sm font-medium text-gray-800 mb-2">
@@ -386,7 +374,6 @@ export default function RegisterPage() {
             </section>
           )}
 
-          {/* STEP 2 — Details */}
           {step === 2 && upline && (
             <section>
               <div className="mb-4">
@@ -404,7 +391,6 @@ export default function RegisterPage() {
               </label>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {/* Name */}
                 <input
                   value={name}
                   onChange={(e) => setName(e.target.value)}
@@ -412,7 +398,6 @@ export default function RegisterPage() {
                   className="w-full rounded-xl border border-gray-200 px-3 py-3 text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
 
-                {/* Email with live validation */}
                 <div>
                   <input
                     value={email}
@@ -431,7 +416,6 @@ export default function RegisterPage() {
                   )}
                 </div>
 
-                {/* Phone group */}
                 <div className="col-span-1 sm:col-span-2">
                   <div className="flex gap-2">
                     <select
@@ -466,7 +450,6 @@ export default function RegisterPage() {
                   </p>
                 </div>
 
-                {/* PAN masked */}
                 <div>
                   <input
                     value={panInput}
@@ -486,7 +469,6 @@ export default function RegisterPage() {
                   )}
                 </div>
 
-                {/* Password with show/hide + strength */}
                 <div>
                   <div className="relative">
                     <input
@@ -505,16 +487,15 @@ export default function RegisterPage() {
                     </button>
                   </div>
 
-                  {/* Strength meter */}
                   <div className="mt-2">
                     <div className="h-2 w-full rounded bg-gray-100 overflow-hidden">
                       <div
                         className={`h-2 transition-all ${
-                          pwScoreVal === 0
+                          pwScore === 0
                             ? "w-0"
-                            : pwScoreVal === 1
+                            : pwScore === 1
                             ? "w-1/3 bg-red-500"
-                            : pwScoreVal === 2
+                            : pwScore === 2
                             ? "w-2/3 bg-amber-500"
                             : "w-full bg-green-600"
                         }`}
@@ -560,11 +541,7 @@ export default function RegisterPage() {
   function Rule({ ok, label }) {
     return (
       <div className="flex items-center gap-1">
-        <span
-          className={`inline-block h-2 w-2 rounded-full ${
-            ok ? "bg-green-600" : "bg-gray-300"
-          }`}
-        />
+        <span className={`inline-block h-2 w-2 rounded-full ${ok ? "bg-green-600" : "bg-gray-300"}`} />
         <span className={`${ok ? "text-gray-800" : ""}`}>{label}</span>
       </div>
     );
