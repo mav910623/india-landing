@@ -72,8 +72,7 @@ export default function DashboardPage() {
       }
     });
     return () => unsub();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [router]);
 
   async function loadUser(uid) {
     setDashError("");
@@ -329,11 +328,6 @@ export default function DashboardPage() {
     );
   }
 
-  const referralLink =
-    userData?.referralId && typeof window !== "undefined"
-      ? `${window.location.origin}/register?ref=${userData.referralId}`
-      : "";
-
   return (
     <div className="min-h-screen bg-white">
       <div className="mx-auto max-w-4xl px-4 py-6 sm:py-10">
@@ -538,7 +532,19 @@ export default function DashboardPage() {
       ? kids.filter((u) => isNodeOrDescendantMatch(u.id))
       : kids;
 
-    // Early empty case
+    const manyRows = filteredKids.length > 60; // threshold for virtualization
+
+    // ✅ Hooks are declared at the top, unconditionally (no early returns before this)
+    const parentRef = useRef(null);
+    const rowVirtualizer = useVirtualizer({
+      count: filteredKids.length,
+      getScrollElement: () => parentRef.current,
+      estimateSize: () => 64,
+      overscan: 8,
+      measureElement: (el) => el.getBoundingClientRect().height,
+    });
+
+    // Empty state AFTER hooks
     if (filteredKids.length === 0 && !(nodePages[parentId]?.hasMore)) {
       return (
         <div className="text-xs sm:text-sm text-gray-500 ml-3 sm:ml-4 py-1">
@@ -546,18 +552,6 @@ export default function DashboardPage() {
         </div>
       );
     }
-
-    const manyRows = filteredKids.length > 60; // threshold for virtualization
-
-    // Hooks must be unconditional:
-    const parentRef = useRef(null);
-    const rowVirtualizer = useVirtualizer({
-      count: filteredKids.length,
-      getScrollElement: () => parentRef.current,
-      estimateSize: () => 64, // safe guess; corrected by measureElement
-      overscan: 8,
-      measureElement: (el) => el.getBoundingClientRect().height,
-    });
 
     // Non-virtualized (small lists)
     if (!manyRows) {
@@ -649,7 +643,7 @@ export default function DashboardPage() {
       );
     }
 
-    // Virtualized list for large sibling sets (self-measured rows)
+    // Virtualized list for large sibling sets
     return (
       <div className="relative">
         <div
