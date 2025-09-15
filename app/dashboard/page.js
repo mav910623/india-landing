@@ -531,14 +531,14 @@ export default function DashboardPage() {
     );
   }
 
-  // --- TreeChildren with self-measured virtualization + overflow guards ---
+  // --- TreeChildren with UNCONDITIONAL hooks + self-measured virtualization ---
   function TreeChildren({ parentId, level }) {
     const kids = childrenCache[parentId] || [];
     const filteredKids = hasActiveSearch
       ? kids.filter((u) => isNodeOrDescendantMatch(u.id))
       : kids;
 
-    // If nothing and no more pages, show empty indicator
+    // Early empty case
     if (filteredKids.length === 0 && !(nodePages[parentId]?.hasMore)) {
       return (
         <div className="text-xs sm:text-sm text-gray-500 ml-3 sm:ml-4 py-1">
@@ -548,20 +548,18 @@ export default function DashboardPage() {
     }
 
     const manyRows = filteredKids.length > 60; // threshold for virtualization
+
+    // Hooks must be unconditional:
     const parentRef = useRef(null);
+    const rowVirtualizer = useVirtualizer({
+      count: filteredKids.length,
+      getScrollElement: () => parentRef.current,
+      estimateSize: () => 64, // safe guess; corrected by measureElement
+      overscan: 8,
+      measureElement: (el) => el.getBoundingClientRect().height,
+    });
 
-    // Only create a virtualizer for large lists
-    const rowVirtualizer = manyRows
-      ? useVirtualizer({
-          count: filteredKids.length,
-          getScrollElement: () => parentRef.current,
-          estimateSize: () => 64, // safe guess; corrected by measureElement
-          overscan: 8,
-          measureElement: (el) => el.getBoundingClientRect().height,
-        })
-      : null;
-
-    // Non-virtualized (small lists): simpler layout, zero jump risk
+    // Non-virtualized (small lists)
     if (!manyRows) {
       return (
         <div className="relative">
@@ -657,14 +655,9 @@ export default function DashboardPage() {
         <div
           ref={parentRef}
           className="overflow-auto overflow-x-hidden"
-          style={{
-            maxHeight: 560, // cap list height so it never pushes the whole page
-          }}
+          style={{ maxHeight: 560 }}
         >
-          <ul
-            className="relative"
-            style={{ height: rowVirtualizer.getTotalSize() }}
-          >
+          <ul className="relative" style={{ height: rowVirtualizer.getTotalSize() }}>
             {rowVirtualizer.getVirtualItems().map((vi) => {
               const u = filteredKids[vi.index];
               const isOpen = expanded.has(u.id);
@@ -675,7 +668,7 @@ export default function DashboardPage() {
               return (
                 <li
                   key={u.id}
-                  ref={rowVirtualizer.measureElement} // measure actual row height
+                  ref={rowVirtualizer.measureElement}
                   className="absolute left-0 right-0"
                   style={{ transform: `translateY(${vi.start}px)` }}
                 >

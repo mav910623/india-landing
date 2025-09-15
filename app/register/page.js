@@ -50,15 +50,11 @@ const hasUpper  = (p) => /[A-Z]/.test(String(p || ""));
 const hasNumber = (p) => /[0-9]/.test(String(p || ""));
 const passwordScore = (p) => [hasMinLen(p), hasUpper(p), hasNumber(p)].filter(Boolean).length;
 
-/** PAN mask + validate
- * Stored format: AAAAA9999A (no dashes)
- * Input mask while typing: AAAAA-9999-A
- */
+/** PAN mask + validate */
 function unmaskPan(s) {
   return String(s || "").replace(/[^A-Za-z0-9]/g, "").toUpperCase();
 }
 function constrainPanCore(core) {
-  // Only allow letters in 0..4 and 9; digits in 5..8
   const raw = unmaskPan(core).slice(0, 10);
   let out = "";
   for (let i = 0; i < raw.length && out.length < 10; i++) {
@@ -74,7 +70,6 @@ function constrainPanCore(core) {
 }
 function formatPanMasked(core10) {
   const c = constrainPanCore(core10);
-  // AAAAA-9999-A (add dashes after 5 and 9 if available)
   if (c.length <= 5) return c;
   if (c.length <= 9) return `${c.slice(0,5)}-${c.slice(5)}`;
   return `${c.slice(0,5)}-${c.slice(5,9)}-${c.slice(9)}`;
@@ -173,7 +168,6 @@ export default function RegisterPage() {
         setCheckingUpline(false);
       }
     })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams]);
 
   /** Bias India if phone looks like 10-digit local */
@@ -238,7 +232,7 @@ export default function RegisterPage() {
     const emailNorm = String(email || "").trim().toLowerCase();
     const rawPhone = String(phoneLocal || "").trim();
     const e164 = toE164(country?.dial, phoneLocal);
-    const panNorm = panCore; // already normalized
+    const panNorm = panCore; // normalized
 
     if (!nameNorm || !emailNorm || !rawPhone || !panNorm || !password) {
       setNotice("Please fill all fields.");
@@ -333,6 +327,7 @@ export default function RegisterPage() {
     () => country ? `${country.dial} ${country.example}` : "",
     [country]
   );
+  const pwScoreVal = pwScore; // alias for readability
 
   return (
     <div className="min-h-screen bg-white">
@@ -515,11 +510,11 @@ export default function RegisterPage() {
                     <div className="h-2 w-full rounded bg-gray-100 overflow-hidden">
                       <div
                         className={`h-2 transition-all ${
-                          pwScore === 0
+                          pwScoreVal === 0
                             ? "w-0"
-                            : pwScore === 1
+                            : pwScoreVal === 1
                             ? "w-1/3 bg-red-500"
-                            : pwScore === 2
+                            : pwScoreVal === 2
                             ? "w-2/3 bg-amber-500"
                             : "w-full bg-green-600"
                         }`}
