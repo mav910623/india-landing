@@ -1,0 +1,761 @@
+"use client";
+
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
+import { auth, db } from "@/lib/firebase";
+import { onAuthStateChanged, signOut } from "firebase/auth";
+import {
+  doc,
+  getDoc,
+  collection,
+  query,
+  where,
+  getDocs,
+  orderBy,
+  limit,
+  startAfter,
+} from "firebase/firestore";
+import { useVirtualizer } from "@tanstack/react-virtual";
+
+const MAX_DEPTH = 6;
+const PAGE_SIZE = 50;
+const DISABLE_EXPAND_ALL_THRESHOLD = 2000;
+
+export default function DashboardPage() {
+  const router = useRouter();
+
+  // Identity
+  const [currentUid, setCurrentUid] = useState(null);
+  const [userData, setUserData] = useState(null);
+  const [upline, setUpline] = useState(null);
+
+  // Loading & errors
+  const [loading, setLoading] = useState(true);
+  const [dashError, setDashError] = useState("");
+  const [treeLoading, setTreeLoading] = useState(false);
+  const [treeError, setTreeError] = useState("");
+
+  // Counts (server, exact)
+  const [counts, setCounts] = useState({
+    levels: { "1": 0, "2": 0, "3": 0, "4": 0, "5": 0, "6": 0 },
+    sixPlus: 0,
+    total: 0,
+  });
+
+  // Tree data (client)
+  const [childrenCache, setChildrenCache] = useState({}); // parentUid -> User[]
+  const [parentOf, setParentOf] = useState({});            // childUid -> parentUid
+  const [expanded, setExpanded] = useState(new Set());     // expanded node IDs
+  const [expandLevel, setExpandLevel] = useState(1);       // dropdown
+
+  // Per-node pagination
+  const [nodePages, setNodePages] = useState({}); // parentUid -> { items, cursor, hasMore }
+
+  // Search
+  const [search, setSearch] = useState("");
+  const searchDebounce = useRef(null);
+  const hasActiveSearch = useMemo(() => search.trim().length >= 2, [search]);
+
+  // Clipboard
+  const [copySuccess, setCopySuccess] = useState("");
+
+  // ===== Init =====
+  useEffect(() => {
+    const unsub = onAuthStateChanged(auth, async (currentUser) => {
+      if (!currentUser) {
+        router.push("/login");
+      } else {
+        setCurrentUid(currentUser.uid);
+        await loadUser(currentUser.uid);
+        await refreshCounts();
+        await expandToLevel(1); // auto L1
+      }
+    });
+    return () => unsub();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  async function loadUser(uid) {
+    setDashError("");
+    try {
+      const meSnap = await getDoc(doc(db, "users", uid));
+      if (!meSnap.exists()) {
+        setDashError("User not found.");
+        setLoading(false);
+        return;
+      }
+      const me = meSnap.data();
+      setUserData(me);
+
+      if (me.upline) {
+        const upSnap = await getDoc(doc(db, "users", me.upline));
+        if (upSnap.exists()) setUpline(upSnap.data());
+      }
+    } catch (e) {
+      console.error(e);
+      setDashError("Failed to load profile.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function refreshCounts() {
+    try {
+      const token = await auth.currentUser?.getIdToken();
+      const res = await fetch("/api/level-counts", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || "Counts error");
+      setCounts(data);
+    } catch (e) {
+      console.error(e);
+      setDashError("Unable to refresh counts.");
+    }
+  }
+
+  // ===== Helpers =====
+  function normalize(s) {
+    return String(s || "").toLowerCase();
+  }
+
+  function waLink(phone, name) {
+    const raw = String(phone || "");
+    const digits = raw.replace(/\D/g, "");
+    const withCc =
+      digits.length === 10 ? `91${digits}` : digits.startsWith("0") ? digits.slice(1) : digits;
+    const msg = encodeURIComponent(`Hi ${name || ""},`);
+    return `https://wa.me/${withCc}?text=${msg}`;
+  }
+
+  // ===== Per-node children (paginated) =====
+  async function fetchChildren(parentUid, { append = false } = {}) {
+    if (!parentUid) return [];
+
+    const page = nodePages[parentUid];
+    if (!append && page?.items) return page.items;
+
+    let qy = query(
+      collection(db, "users"),
+      where("upline", "==", parentUid),
+      orderBy("createdAt", "desc"),
+      limit(PAGE_SIZE)
+    );
+    if (append && page?.cursor) {
+      qy = query(
+        collection(db, "users"),
+        where("upline", "==", parentUid),
+        orderBy("createdAt", "desc"),
+        startAfter(page.cursor),
+        limit(PAGE_SIZE)
+      );
+    }
+
+    const snap = await getDocs(qy);
+    const rows = snap.docs.map((d) => {
+      const x = d.data() || {};
+      return {
+        id: d.id,
+        uid: x.uid || d.id,
+        name: x.name || "",
+        email: x.email || "",
+        phone: x.phone || "",
+        referralId: x.referralId || "",
+        createdAt: x.createdAt?.toDate ? x.createdAt.toDate() : null,
+      };
+    });
+
+    const newItems = append && page?.items ? [...page.items, ...rows] : rows;
+    const cursor = snap.docs[snap.docs.length - 1] || null;
+    const hasMore = snap.size === PAGE_SIZE;
+
+    setNodePages((prev) => ({ ...prev, [parentUid]: { items: newItems, cursor, hasMore } }));
+    setChildrenCache((prev) => ({ ...prev, [parentUid]: newItems }));
+    setParentOf((prev) => {
+      const next = { ...prev };
+      for (const k of newItems) next[k.id] = parentUid;
+      return next;
+    });
+
+    return newItems;
+  }
+
+  async function toggleNode(parentUid, level) {
+    if (!currentUid || !parentUid || level > MAX_DEPTH) return;
+    setTreeError("");
+    setTreeLoading(true);
+    try {
+      const willOpen = !expanded.has(parentUid);
+      if (willOpen) await fetchChildren(parentUid);
+      const next = new Set(expanded);
+      if (willOpen) next.add(parentUid);
+      else next.delete(parentUid);
+      setExpanded(next);
+    } catch (e) {
+      console.error(e);
+      setTreeError("Expand/collapse failed.");
+    } finally {
+      setTreeLoading(false);
+    }
+  }
+
+  async function expandToLevel(targetLevel) {
+    if (!currentUid) return;
+    setTreeError("");
+    setTreeLoading(true);
+    try {
+      let newExpanded = new Set();
+      let frontier = [currentUid];
+      for (let lvl = 1; lvl <= targetLevel; lvl++) {
+        const next = [];
+        for (const pid of frontier) {
+          const kids = await fetchChildren(pid);
+          if (kids.length) {
+            newExpanded.add(pid);
+            next.push(...kids.map((k) => k.id));
+          }
+        }
+        frontier = next;
+      }
+      setExpanded(newExpanded);
+      setExpandLevel(targetLevel);
+    } catch (e) {
+      console.error(e);
+      setTreeError("Expand failed.");
+    } finally {
+      setTreeLoading(false);
+    }
+  }
+
+  async function expandAll() {
+    await expandToLevel(MAX_DEPTH);
+  }
+
+  function collapseAll() {
+    setExpanded(new Set());
+    setExpandLevel(0);
+  }
+
+  // ===== Server search (fast, path-based) =====
+  async function handleSearchChange(val) {
+    setSearch(val);
+    if (searchDebounce.current) clearTimeout(searchDebounce.current);
+
+    searchDebounce.current = setTimeout(async () => {
+      const q = normalize(val);
+      if (!q || q.length < 2) {
+        if (expandLevel > 0) await expandToLevel(expandLevel);
+        else collapseAll();
+        return;
+      }
+
+      try {
+        setTreeLoading(true);
+        const token = await auth.currentUser?.getIdToken();
+        const res = await fetch(`/api/search?q=${encodeURIComponent(q)}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const payload = await res.json();
+        if (!res.ok) throw new Error(payload?.error || "Search failed");
+
+        // Expand all ancestors from server-provided paths
+        const toExpand = new Set(expanded);
+        if (currentUid) toExpand.add(currentUid);
+
+        // Ensure each ancestor branch has its children fetched
+        for (const hit of payload.results || []) {
+          const path = hit.path || [];
+          for (let i = 0; i < path.length; i++) {
+            const pid = path[i];
+            await fetchChildren(pid);
+            toExpand.add(pid);
+          }
+          if (hit.user?.upline) {
+            await fetchChildren(hit.user.upline);
+            toExpand.add(hit.user.upline);
+          }
+        }
+        setExpanded(toExpand);
+      } catch (e) {
+        console.error(e);
+        setTreeError("Search failed.");
+      } finally {
+        setTreeLoading(false);
+      }
+    }, 250);
+  }
+
+  function nodeMatches(u) {
+    const q = normalize(search);
+    if (q.length < 2) return true;
+    const hay = `${normalize(u.name)} ${normalize(u.email)} ${normalize(u.referralId)}`;
+    return hay.includes(q);
+  }
+
+  function isNodeOrDescendantMatch(nodeId) {
+    const par = parentOf[nodeId];
+    if (par && childrenCache[par]) {
+      const me = childrenCache[par].find((x) => x.id === nodeId);
+      if (me && nodeMatches(me)) return true;
+    }
+    const kids = childrenCache[nodeId] || [];
+    for (const k of kids) {
+      if (nodeMatches(k)) return true;
+      if (isNodeOrDescendantMatch(k.id)) return true;
+    }
+    return false;
+  }
+
+  // Clipboard + logout
+  function handleCopy() {
+    if (userData?.referralId) {
+      const link = `${window.location.origin}/register?ref=${userData.referralId}`;
+      navigator.clipboard.writeText(link).then(() => {
+        setCopySuccess("Referral link copied!");
+        setTimeout(() => setCopySuccess(""), 2000);
+      });
+    }
+  }
+  async function handleLogout() {
+    await signOut(auth);
+    router.push("/login");
+  }
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-white">
+        <p className="text-base text-gray-500">Loading…</p>
+      </div>
+    );
+  }
+
+  const referralLink =
+    userData?.referralId && typeof window !== "undefined"
+      ? `${window.location.origin}/register?ref=${userData.referralId}`
+      : "";
+
+  return (
+    <div className="min-h-screen bg-white">
+      <div className="mx-auto max-w-4xl px-4 py-6 sm:py-10">
+        {/* Header */}
+        <header className="mb-6 sm:mb-8">
+          <h1 className="text-2xl sm:text-3xl font-semibold tracking-tight text-gray-900 text-center">
+            Dashboard
+          </h1>
+        </header>
+
+        {/* Identity */}
+        <section className="rounded-2xl border border-gray-100 bg-white/80 shadow-sm p-4 sm:p-6">
+          {dashError && (
+            <div className="mb-4 rounded-xl bg-amber-50 px-4 py-3 text-sm text-amber-800 border border-amber-200">
+              {dashError}
+            </div>
+          )}
+
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="space-y-1">
+              <div className="text-base sm:text-lg font-medium text-gray-900">
+                {userData?.name}
+              </div>
+              <div className="text-sm text-gray-600">
+                <a className="hover:underline" href={`mailto:${userData?.email}`}>
+                  {userData?.email}
+                </a>
+              </div>
+              <div className="text-sm text-gray-600">
+                Referral ID:{" "}
+                <span className="font-mono text-blue-700">{userData?.referralId}</span>
+              </div>
+              {upline && (
+                <div className="text-xs text-gray-500">
+                  Upline: {upline.name}{" "}
+                  <span className="font-mono text-blue-600">({upline.referralId})</span>
+                </div>
+              )}
+            </div>
+
+            <div className="flex gap-2">
+              <button
+                onClick={handleCopy}
+                className="rounded-xl bg-blue-600 text-white px-3 py-2 text-sm hover:bg-blue-700 active:scale-[0.99] transition"
+              >
+                Copy Referral Link
+              </button>
+              {copySuccess && (
+                <span className="self-center text-xs text-green-600">{copySuccess}</span>
+              )}
+              <button
+                onClick={handleLogout}
+                className="rounded-xl border border-gray-200 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 active:scale-[0.99] transition"
+              >
+                Logout
+              </button>
+            </div>
+          </div>
+        </section>
+
+        {/* Stats */}
+        <section className="mt-6 grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
+          <StatCard label="Total Downlines" value={counts.total} tone="green" />
+          {[1,2,3,4,5,6].map((lvl) => (
+            <StatCard
+              key={lvl}
+              label={`Level ${lvl}`}
+              value={counts.levels[String(lvl)] || 0}
+              tone="blue"
+            />
+          ))}
+          <StatCard label="Level 6+" value={counts.sixPlus || 0} tone="purple" />
+        </section>
+
+        {/* Tree */}
+        <section className="mt-8 rounded-2xl border border-gray-100 bg-white/80 shadow-sm p-4 sm:p-6 overflow-x-auto">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <div>
+              <h2 className="text-lg sm:text-xl font-semibold text-gray-900">
+                Your Team
+              </h2>
+              <p className="text-xs text-gray-500 mt-1">
+                Expand up to 6 levels. Search by name / email / ID.
+              </p>
+            </div>
+            <div className="flex gap-2">
+              <input
+                value={search}
+                onChange={(e) => handleSearchChange(e.target.value)}
+                placeholder="Search (min 2 chars)…"
+                className="w-full sm:w-60 rounded-xl border border-gray-200 px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+              <select
+                value={expandLevel}
+                onChange={async (e) => {
+                  const val = Number(e.target.value);
+                  if (val === 0) collapseAll();
+                  else await expandToLevel(val);
+                }}
+                className="rounded-xl border border-gray-200 px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                title="Expand depth"
+              >
+                <option value={0}>Collapse all</option>
+                <option value={1}>Expand to Level 1</option>
+                <option value={2}>Expand to Level 2</option>
+                <option value={3}>Expand to Level 3</option>
+                <option value={4}>Expand to Level 4</option>
+                <option value={5}>Expand to Level 5</option>
+                <option value={6}>Expand to Level 6 (All)</option>
+              </select>
+              <button
+                onClick={refreshCounts}
+                className="rounded-xl border border-gray-200 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 active:scale-[0.99] transition"
+                title="Refresh counts"
+              >
+                Refresh
+              </button>
+              <button
+                onClick={expandAll}
+                disabled={counts.total > DISABLE_EXPAND_ALL_THRESHOLD || treeLoading}
+                className={`rounded-xl px-3 py-2 text-sm transition ${
+                  counts.total > DISABLE_EXPAND_ALL_THRESHOLD
+                    ? "bg-gray-100 text-gray-400 border border-gray-200"
+                    : "bg-blue-600 text-white hover:bg-blue-700"
+                }`}
+                title={
+                  counts.total > DISABLE_EXPAND_ALL_THRESHOLD
+                    ? "Disabled to avoid loading a very large tree at once"
+                    : "Expand All"
+                }
+              >
+                Expand All
+              </button>
+            </div>
+          </div>
+
+          {treeError && (
+            <div className="mt-3 rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700 border border-red-200">
+              {treeError}
+            </div>
+          )}
+
+          {/* Root (L0) */}
+          <div className="mt-4">
+            <div className="flex items-center gap-2 mb-2">
+              <button
+                onClick={() => toggleNode(currentUid, 1)}
+                disabled={treeLoading}
+                className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100 active:scale-[0.98] transition"
+                title={expanded.has(currentUid) ? "Collapse" : "Expand"}
+              >
+                {expanded.has(currentUid) ? "−" : "+"}
+              </button>
+              <div className="flex flex-col min-w-0">
+                <div className="text-sm sm:text-base font-medium text-gray-900 truncate">
+                  <span className="mr-2 inline-block rounded bg-gray-100 px-2 py-0.5 text-[10px] text-gray-700">
+                    L0
+                  </span>
+                  {userData?.name || "You"}
+                </div>
+                <div className="text-xs text-gray-500 truncate">
+                  <a className="hover:underline" href={`mailto:${userData?.email}`}>
+                    {userData?.email}
+                  </a>
+                  <span className="mx-2">•</span>
+                  <span className="font-mono text-blue-700">{userData?.referralId}</span>
+                </div>
+              </div>
+            </div>
+
+            {expanded.has(currentUid) && (
+              <div className="ml-5 sm:ml-6 border-l border-gray-100 pl-3 sm:pl-4">
+                <TreeChildren parentId={currentUid} level={1} />
+              </div>
+            )}
+          </div>
+        </section>
+      </div>
+    </div>
+  );
+
+  // ===== UI components & inner helpers =====
+
+  function StatCard({ label, value, tone }) {
+    const tones = {
+      green: "bg-green-50 text-green-700 border-green-100",
+      blue: "bg-blue-50 text-blue-700 border-blue-100",
+      purple: "bg-purple-50 text-purple-700 border-purple-100",
+    };
+    return (
+      <div className={`rounded-2xl border ${tones[tone] || "border-gray-100"} p-4 text-center shadow-sm`}>
+        <div className="text-xs font-medium opacity-80">{label}</div>
+        <div className="mt-1 text-2xl font-semibold">{value}</div>
+      </div>
+    );
+  }
+
+  // --- TreeChildren with self-measured virtualization + overflow guards ---
+  function TreeChildren({ parentId, level }) {
+    const kids = childrenCache[parentId] || [];
+    const filteredKids = hasActiveSearch
+      ? kids.filter((u) => isNodeOrDescendantMatch(u.id))
+      : kids;
+
+    // If nothing and no more pages, show empty indicator
+    if (filteredKids.length === 0 && !(nodePages[parentId]?.hasMore)) {
+      return (
+        <div className="text-xs sm:text-sm text-gray-500 ml-3 sm:ml-4 py-1">
+          (no members at level {level})
+        </div>
+      );
+    }
+
+    const manyRows = filteredKids.length > 60; // threshold for virtualization
+    const parentRef = useRef(null);
+
+    // Only create a virtualizer for large lists
+    const rowVirtualizer = manyRows
+      ? useVirtualizer({
+          count: filteredKids.length,
+          getScrollElement: () => parentRef.current,
+          estimateSize: () => 64, // safe guess; corrected by measureElement
+          overscan: 8,
+          measureElement: (el) => el.getBoundingClientRect().height,
+        })
+      : null;
+
+    // Non-virtualized (small lists): simpler layout, zero jump risk
+    if (!manyRows) {
+      return (
+        <div className="relative">
+          <ul className="divide-y divide-gray-100">
+            {filteredKids.map((u) => {
+              const isOpen = expanded.has(u.id);
+              const canDrill = level < MAX_DEPTH;
+              const highlight = hasActiveSearch && nodeMatches(u);
+              const phoneClean = String(u.phone || "").trim();
+
+              return (
+                <li key={u.id} className="py-2 sm:py-2.5">
+                  <div className="flex items-start sm:items-center justify-between gap-2">
+                    <div className="flex items-start sm:items-center gap-2 min-w-0">
+                      {canDrill ? (
+                        <button
+                          onClick={() => toggleNode(u.id, level + 1)}
+                          className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100 active:scale-[0.98] transition"
+                          title={isOpen ? "Collapse" : "Expand"}
+                        >
+                          {isOpen ? "−" : "+"}
+                        </button>
+                      ) : (
+                        <div className="h-7 w-7" />
+                      )}
+
+                      <div className={`flex-1 min-w-0 rounded-lg px-1 ${highlight ? "bg-yellow-50" : ""}`}>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="inline-block rounded bg-gray-100 px-1.5 py-0.5 text-[10px] text-gray-700">
+                            L{level}
+                          </span>
+                          <span className="font-medium text-gray-900 truncate">
+                            {u.name || "Unnamed"}
+                          </span>
+                        </div>
+
+                        <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-gray-600">
+                          {u.email && (
+                            <a className="hover:underline truncate" href={`mailto:${u.email}`}>
+                              {u.email}
+                            </a>
+                          )}
+                          {u.email && phoneClean && <span className="opacity-40">•</span>}
+                          {phoneClean && (
+                            <a
+                              className="inline-flex items-center gap-1 rounded-full bg-emerald-50 text-emerald-700 px-2 py-0.5 border border-emerald-100 hover:bg-emerald-100"
+                              href={waLink(phoneClean, u.name)}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              title="Message on WhatsApp"
+                            >
+                              <span className="text-[11px]">WhatsApp</span>
+                            </a>
+                          )}
+                          <span className="opacity-40 hidden sm:inline">•</span>
+                          <span className="font-mono text-blue-700 truncate">{u.referralId}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="text-[11px] sm:text-xs text-gray-500 shrink-0">
+                      {u.createdAt ? u.createdAt.toISOString().slice(0, 10) : ""}
+                    </div>
+                  </div>
+
+                  {isOpen && canDrill && (
+                    <div className="mt-2 ml-4 sm:ml-6 border-l border-gray-100 pl-3 sm:pl-4">
+                      <TreeChildren parentId={u.id} level={level + 1} />
+                    </div>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+
+          {nodePages[parentId]?.hasMore && (
+            <div className="mt-2">
+              <button
+                onClick={() => fetchChildren(parentId, { append: true })}
+                className="text-sm rounded-lg border border-gray-200 px-3 py-1.5 text-gray-700 hover:bg-gray-50"
+              >
+                Load more…
+              </button>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    // Virtualized list for large sibling sets (self-measured rows)
+    return (
+      <div className="relative">
+        <div
+          ref={parentRef}
+          className="overflow-auto overflow-x-hidden"
+          style={{
+            maxHeight: 560, // cap list height so it never pushes the whole page
+          }}
+        >
+          <ul
+            className="relative"
+            style={{ height: rowVirtualizer.getTotalSize() }}
+          >
+            {rowVirtualizer.getVirtualItems().map((vi) => {
+              const u = filteredKids[vi.index];
+              const isOpen = expanded.has(u.id);
+              const canDrill = level < MAX_DEPTH;
+              const highlight = hasActiveSearch && nodeMatches(u);
+              const phoneClean = String(u.phone || "").trim();
+
+              return (
+                <li
+                  key={u.id}
+                  ref={rowVirtualizer.measureElement} // measure actual row height
+                  className="absolute left-0 right-0"
+                  style={{ transform: `translateY(${vi.start}px)` }}
+                >
+                  <div className="py-2 sm:py-2.5 border-b border-gray-100">
+                    <div className="flex items-start sm:items-center justify-between gap-2">
+                      <div className="flex items-start sm:items-center gap-2 min-w-0">
+                        {canDrill ? (
+                          <button
+                            onClick={() => toggleNode(u.id, level + 1)}
+                            className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100 active:scale-[0.98] transition"
+                            title={isOpen ? "Collapse" : "Expand"}
+                          >
+                            {isOpen ? "−" : "+"}
+                          </button>
+                        ) : (
+                          <div className="h-7 w-7" />
+                        )}
+
+                        <div className={`flex-1 min-w-0 rounded-lg px-1 ${highlight ? "bg-yellow-50" : ""}`}>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="inline-block rounded bg-gray-100 px-1.5 py-0.5 text-[10px] text-gray-700">
+                              L{level}
+                            </span>
+                            <span className="font-medium text-gray-900 truncate">
+                              {u.name || "Unnamed"}
+                            </span>
+                          </div>
+
+                          <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-gray-600">
+                            {u.email && (
+                              <a className="hover:underline truncate" href={`mailto:${u.email}`}>
+                                {u.email}
+                              </a>
+                            )}
+                            {u.email && phoneClean && <span className="opacity-40">•</span>}
+                            {phoneClean && (
+                              <a
+                                className="inline-flex items-center gap-1 rounded-full bg-emerald-50 text-emerald-700 px-2 py-0.5 border border-emerald-100 hover:bg-emerald-100"
+                                href={waLink(phoneClean, u.name)}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                title="Message on WhatsApp"
+                              >
+                                <span className="text-[11px]">WhatsApp</span>
+                              </a>
+                            )}
+                            <span className="opacity-40 hidden sm:inline">•</span>
+                            <span className="font-mono text-blue-700 truncate">{u.referralId}</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="text-[11px] sm:text-xs text-gray-500 shrink-0">
+                        {u.createdAt ? u.createdAt.toISOString().slice(0, 10) : ""}
+                      </div>
+                    </div>
+
+                    {isOpen && canDrill && (
+                      <div className="mt-2 ml-4 sm:ml-6 border-l border-gray-100 pl-3 sm:pl-4">
+                        <TreeChildren parentId={u.id} level={level + 1} />
+                      </div>
+                    )}
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+
+        {nodePages[parentId]?.hasMore && (
+          <div className="mt-2">
+            <button
+              onClick={() => fetchChildren(parentId, { append: true })}
+              className="text-sm rounded-lg border border-gray-200 px-3 py-1.5 text-gray-700 hover:bg-gray-50"
+            >
+              Load more…
+            </button>
+          </div>
+        )}
+      </div>
+    );
+  }
+}
