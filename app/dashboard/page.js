@@ -226,10 +226,6 @@ export default function DashboardPage() {
     }
   }
 
-  async function expandAll() {
-    await expandToLevel(MAX_DEPTH);
-  }
-
   function collapseAll() {
     setExpanded(new Set());
     setExpandLevel(0);
@@ -388,18 +384,33 @@ export default function DashboardPage() {
           </div>
         </section>
 
-        {/* Stats */}
-        <section className="mt-6 grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
-          <StatCard label="Total Downlines" value={counts.total} tone="green" />
-          {[1,2,3,4,5,6].map((lvl) => (
-            <StatCard
-              key={lvl}
-              label={`Level ${lvl}`}
-              value={counts.levels[String(lvl)] || 0}
-              tone="blue"
-            />
-          ))}
-          <StatCard label="Level 6+" value={counts.sixPlus || 0} tone="purple" />
+        {/* Stats — Option A: Total card + horizontal chips */}
+        <section className="mt-6">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
+            <StatCard label="Total Downlines" value={counts.total} tone="green" />
+          </div>
+
+          <div className="mt-3 -mx-1 overflow-x-auto">
+            <div className="flex gap-2 px-1 pb-1">
+              {[1, 2, 3, 4, 5].map((l) => (
+                <span
+                  key={l}
+                  className="inline-flex items-center rounded-full border border-gray-200 bg-gray-50 px-3 py-1 text-xs text-gray-800"
+                >
+                  L{l}
+                  <span className="ml-1.5 font-semibold">
+                    {counts.levels[String(l)] || 0}
+                  </span>
+                </span>
+              ))}
+              <span className="inline-flex items-center rounded-full border border-purple-200 bg-purple-50 px-3 py-1 text-xs text-purple-700">
+                6+
+                <span className="ml-1.5 font-semibold">
+                  {counts.sixPlus || 0}
+                </span>
+              </span>
+            </div>
+          </div>
         </section>
 
         {/* Tree */}
@@ -438,29 +449,8 @@ export default function DashboardPage() {
                 <option value={5}>Expand to Level 5</option>
                 <option value={6}>Expand to Level 6 (All)</option>
               </select>
-              <button
-                onClick={refreshCounts}
-                className="rounded-xl border border-gray-200 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 active:scale-[0.99] transition"
-                title="Refresh counts"
-              >
-                Refresh
-              </button>
-              <button
-                onClick={expandAll}
-                disabled={counts.total > DISABLE_EXPAND_ALL_THRESHOLD || treeLoading}
-                className={`rounded-xl px-3 py-2 text-sm transition ${
-                  counts.total > DISABLE_EXPAND_ALL_THRESHOLD
-                    ? "bg-gray-100 text-gray-400 border border-gray-200"
-                    : "bg-blue-600 text-white hover:bg-blue-700"
-                }`}
-                title={
-                  counts.total > DISABLE_EXPAND_ALL_THRESHOLD
-                    ? "Disabled to avoid loading a very large tree at once"
-                    : "Expand All"
-                }
-              >
-                Expand All
-              </button>
+              {/* Removed Refresh button */}
+              {/* Removed Expand All button */}
             </div>
           </div>
 
