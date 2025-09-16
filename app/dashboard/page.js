@@ -22,9 +22,10 @@ import QRCode from "qrcode";
 /** ===== Constants ===== */
 const MAX_DEPTH = 6;
 const PAGE_SIZE = 50;
-const L1_GOAL = 10;
-const HELP_TARGET = 3;
-const VIRTUALIZE_THRESHOLD = 150; // only virtualize when a level shows many rows
+const L1_GOAL = 10;     // Mission 1 target
+const M2_TARGET = 3;    // Mission 2 target (L1 leaders with 10)
+const M3_TARGET = 3;    // Mission 3 target (L2 leaders with 10)
+const VIRTUALIZE_THRESHOLD = 150;
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -47,21 +48,23 @@ export default function DashboardPage() {
   });
 
   /** ===== Tree data & expansion ===== */
-  const [childrenCache, setChildrenCache] = useState({});
+  const [childrenCache, setChildrenCache] = useState({}); // parentUid -> children[]
   const [parentOf, setParentOf] = useState({});
   const [expanded, setExpanded] = useState(new Set());
   const [nodePages, setNodePages] = useState({}); // parentUid -> { items, cursor, hasMore }
 
-  /** ===== L1 progress cache (x/10) ===== */
-  const [l1Progress, setL1Progress] = useState({});
+  /** ===== Progress caches ===== */
+  const [l1Progress, setL1Progress] = useState({});   // uid -> [0..10] (# of direct L1 downlines)
+  const [l2Leaders10, setL2Leaders10] = useState(0);  // count of L2 members with ≥10 (for Mission 3)
 
   /** ===== Clipboard / QR ===== */
   const [copySuccess, setCopySuccess] = useState("");
   const [qrDataUrl, setQrDataUrl] = useState("");
   const [qrSize, setQrSize] = useState(120);
   const qrBoxRef = useRef(null);
+  const iconPx = Math.min(28, Math.max(18, Math.floor(qrSize * 0.18)));
 
-  /** ===== Help sheet ===== */
+  /** ===== Help sheet (kept) ===== */
   const [showHelp, setShowHelp] = useState(false);
 
   /** ===== Helpers ===== */
@@ -82,7 +85,7 @@ export default function DashboardPage() {
     const link = referralLink();
     navigator.clipboard.writeText(link).then(() => {
       setCopySuccess("Referral link copied!");
-      setTimeout(() => setCopySuccess(""), 1800);
+      setTimeout(() => setCopySuccess(""), 1600);
     });
   };
 
@@ -262,7 +265,7 @@ export default function DashboardPage() {
     }
   }
 
-  /** ===== L1 progress (badge) ===== */
+  /** ===== Progress helpers ===== */
   async function fetchL1Progress(uid) {
     if (l1Progress[uid] !== undefined) return l1Progress[uid];
     const qy = query(collection(db, "users"), where("upline", "==", uid), limit(11));
@@ -272,19 +275,89 @@ export default function DashboardPage() {
     return count;
   }
 
-  /** Mission 2: completed L1s (>=10) */
+  /** Mission 2: number of L1 with ≥10 */
+  const l1Children = childrenCache[currentUid] || [];
   const completedL1 = useMemo(() => {
-    const kids = childrenCache[currentUid] || [];
     let c = 0;
-    for (const kid of kids) {
+    for (const kid of l1Children) {
       const n = l1Progress[kid.id];
       if (n !== undefined && n >= 10) c++;
     }
     return c;
-  }, [childrenCache, currentUid, l1Progress]);
+  }, [l1Children, l1Progress]);
 
-  const goalDone = (counts.levels?.["1"] || 0) >= L1_GOAL;
-  const goalPct = Math.min(100, Math.round(((counts.levels?.["1"] || 0) / L1_GOAL) * 100));
+  /** Mission 3: number of L2 with ≥10 (prefetch after M2 done) */
+  const mission1Done = (counts.levels?.["1"] || 0) >= L1_GOAL;
+  const mission2Done = mission1Done && completedL1 >= M2_TARGET;
+
+  useEffect(() => {
+    // Prefetch grandchildren and compute how many L2 members reached 10
+    if (!mission2Done || !currentUid) return;
+
+    (async () => {
+      try {
+        // Ensure Level 1 is loaded
+        const L1 = childrenCache[currentUid] || (await fetchChildren(currentUid));
+        let tally = 0;
+
+        // For each L1 member, load their children (L2) and check their own L1 counts
+        // Safety caps to avoid heavy reads
+        for (const l1 of L1.slice(0, 50)) {
+          const l2 = childrenCache[l1.id] || (await fetchChildren(l1.id));
+          for (const g of (l2 || []).slice(0, 200)) {
+            const cnt = await fetchL1Progress(g.id);
+            if (cnt >= 10) {
+              tally++;
+              if (tally >= M3_TARGET) break;
+            }
+          }
+          if (tally >= M3_TARGET) break;
+        }
+        setL2Leaders10(tally);
+      } catch (e) {
+        console.warn("Mission 3 tally failed", e);
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mission2Done, currentUid]);
+
+  /** Hero guidance (dynamic) */
+  function heroLine() {
+    if (!mission1Done) {
+      return (
+        <>
+          Start now: complete <strong>Mission 1</strong> by sponsoring your first{" "}
+          <strong>10 India Founders</strong>. Share your link or show your QR.
+        </>
+      );
+    }
+    if (!mission2Done) {
+      return (
+        <>
+          Great work! Next: <strong>Mission 2</strong> — help{" "}
+          <strong>3 leaders</strong> in your Level 1 each sponsor{" "}
+          <strong>10</strong>. Coach them and celebrate their wins.
+        </>
+      );
+    }
+    if (l2Leaders10 < M3_TARGET) {
+      return (
+        <>
+          Leaders are growing. Now <strong>Mission 3</strong> — multiply your impact:
+          support <strong>3 leaders</strong> in Level 2 to reach <strong>10</strong> each.
+        </>
+      );
+    }
+    return <>You’re building a powerful network. Keep multiplying your leaders.</>;
+  }
+
+  const m1Pct = Math.min(100, Math.round(((counts.levels?.["1"] || 0) / L1_GOAL) * 100));
+  const m2Pct = mission1Done
+    ? Math.min(100, Math.round((completedL1 / M2_TARGET) * 100))
+    : 0;
+  const m3Pct = mission2Done
+    ? Math.min(100, Math.round((l2Leaders10 / M3_TARGET) * 100))
+    : 0;
 
   /** ===== Loading screen ===== */
   if (loading) {
@@ -325,7 +398,7 @@ export default function DashboardPage() {
       </header>
 
       <main className="mx-auto max-w-4xl px-4 py-6 sm:py-8">
-        {/* ===== Hero: guidance + QR (no share buttons here) ===== */}
+        {/* ===== Hero: dynamic line + QR + actions under QR ===== */}
         <section className="rounded-2xl border border-gray-100 bg-white shadow-sm p-4 sm:p-6">
           <div className="flex items-center justify-between gap-3">
             <div className="min-w-0">
@@ -334,11 +407,8 @@ export default function DashboardPage() {
                 {userData?.name || "India Founder"}
               </h2>
 
-              {/* New guidance copy */}
-              <p className="mt-2 text-sm text-gray-700">
-                Start building your network now. Complete <strong>Mission 1</strong> by sponsoring your first
-                <strong> 10 India Founders</strong>; then unlock <strong>Mission 2</strong> to grow leaders in your team.
-              </p>
+              {/* Dynamic guidance copy */}
+              <p className="mt-2 text-sm text-gray-700">{heroLine()}</p>
 
               {dashError && (
                 <div className="mt-3 rounded-xl bg-amber-50 px-4 py-3 text-sm text-amber-800 border border-amber-200">
@@ -347,7 +417,7 @@ export default function DashboardPage() {
               )}
             </div>
 
-            {/* QR (no icon buttons below; sharing lives in sticky bar) */}
+            {/* QR + action buttons (copy + WhatsApp) */}
             <div className="shrink-0" id="qrShareBlock">
               <div
                 ref={qrBoxRef}
@@ -367,42 +437,89 @@ export default function DashboardPage() {
                     style={{ width: qrSize, height: qrSize }}
                   />
                 </div>
+
+                {/* Icon bar under QR */}
+                <div className="mt-2 grid grid-cols-2 gap-2 w-full">
+                  <button
+                    onClick={handleCopy}
+                    aria-label="Copy referral link"
+                    className="rounded-xl bg-blue-600 hover:bg-blue-700 transition flex items-center justify-center"
+                    title="Copy referral link"
+                    style={{ height: Math.max(36, Math.floor(qrSize * 0.28)) }}
+                  >
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      width={iconPx}
+                      height={iconPx}
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="white"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                      <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                    </svg>
+                  </button>
+                  <a
+                    href={`https://wa.me/?text=${encodeURIComponent(
+                      "Ready to be an India Founder? Register using this link and start building team India\n\n" +
+                        referralLink()
+                    )}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    aria-label="Share on WhatsApp"
+                    className="rounded-xl border border-emerald-200 bg-emerald-50 hover:bg-emerald-100 transition flex items-center justify-center"
+                    title="Share on WhatsApp"
+                    style={{ height: Math.max(36, Math.floor(qrSize * 0.28)) }}
+                  >
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      width={iconPx}
+                      height={iconPx}
+                      viewBox="0 0 24 24"
+                      fill="currentColor"
+                      className="text-emerald-700"
+                    >
+                      <path d="M20.52 3.48A11.94 11.94 0 0 0 12.01 0C5.39 0 .04 5.35.04 11.96c0 2.11.55 4.16 1.6 5.99L0 24l6.2-1.62a11.95 11.95 0 0 0 5.81 1.49h.01c6.61 0 11.96-5.35 11.96-11.96 0-3.2-1.25-6.21-3.46-8.42ZM12.02 21.3h-.01a9.29 9.29 0 0 1-4.74-1.3l-.34-.2-3.68.96.98-3.58-.22-.37a9.27 9.27 0 0 1-1.42-4.9c0-5.12 4.17-9.29 9.3-9.29 2.48 0 4.81.96 6.57 2.72a9.25 9.25 0 0 1 2.72 6.57c0 5.13-4.17 9.29-9.3 9.29Zm5.35-6.94c-.29-.15-1.7-.84-1.96-.94-.26-.1-.45-.15-.64.15-.19.29-.74.94-.91 1.13-.17.19-.34.21-.63.07-.29-.15-1.22-.45-2.32-1.43-.86-.77-1.44-1.73-1.61-2.02-.17-.29-.02-.45.13-.6.14-.14.29-.37.43-.56.14-.19.19-.32.29-.53.1-.21.05-.39-.02-.54-.07-.15-.64-1.55-.88-2.12-.23-.56-.47-.49-.64-.5h-.55c-.19 0-.5.07-.76.37-.26.29-1 1-1 2.42s1.03 2.81 1.18 3.01c.15.19 2.03 3.09 4.91 4.34.69.3 1.23.48 1.65.61.69.22 1.31.19 1.8.12.55-.08 1.7-.7 1.94-1.37.24-.67.24-1.24.17-1.36-.07-.12-.26-.19-.55-.34Z" />
+                    </svg>
+                  </a>
+                </div>
+
+                {copySuccess && (
+                  <span className="mt-1 text-[11px] text-green-600">{copySuccess}</span>
+                )}
               </div>
             </div>
           </div>
-
-          {/* Mini-card: Total team size */}
-          <div className="mt-4 grid grid-cols-2 sm:grid-cols-4 gap-3">
-            <MiniStatCard label="Total team size" value={counts.total} />
-          </div>
         </section>
 
-        {/* ===== Missions (no buttons; bigger, colored rings; ring left, text right) ===== */}
+        {/* ===== Missions (Build / Duplicate / Multiply) ===== */}
         <section className="mt-6">
           <div className="grid gap-3 sm:grid-cols-2">
             <MissionWide
-              title="Mission 1: Sponsor 10 India Founders"
-              subtitle="Invite Founders to your Level 1 and reach 10/10 to unlock Team Growth."
+              title="Mission 1: Build"
+              subtitle="Sponsor your first 10 India Founders. This unlocks your team’s momentum."
               progress={`${counts.levels?.["1"] || 0}/10`}
-              pct={goalPct}
-              color={goalPct >= 100 ? "green" : goalPct >= 60 ? "blue" : goalPct > 0 ? "amber" : "gray"}
+              pct={m1Pct}
             />
 
-            {goalDone && (
+            {mission1Done && (
               <MissionWide
-                title="Mission 2: Team Growth"
-                subtitle="Help 3 of your Level 1 each sponsor their 10. Build leaders, not just numbers."
-                progress={`${Math.min(HELP_TARGET, completedL1)}/3`}
-                pct={Math.min(100, Math.round((completedL1 / HELP_TARGET) * 100))}
-                color={
-                  completedL1 >= HELP_TARGET
-                    ? "green"
-                    : completedL1 >= 2
-                    ? "blue"
-                    : completedL1 >= 1
-                    ? "amber"
-                    : "gray"
-                }
+                title="Mission 2: Duplicate"
+                subtitle="Grow 3 leaders in Level 1 — help each reach their own 10."
+                progress={`${Math.min(M2_TARGET, completedL1)}/3`}
+                pct={m2Pct}
+              />
+            )}
+
+            {mission2Done && (
+              <MissionWide
+                title="Mission 3: Multiply"
+                subtitle="Repeat the process in Level 2 — support 3 leaders to reach 10."
+                progress={`${Math.min(M3_TARGET, l2Leaders10)}/3`}
+                pct={m3Pct}
               />
             )}
           </div>
@@ -421,6 +538,29 @@ export default function DashboardPage() {
           {treeError && (
             <div className="mt-3 rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700 border border-red-200">
               {treeError}
+            </div>
+          )}
+
+          {/* Show level stats only once Level 2 exists */}
+          {counts.levels?.["2"] > 0 && (
+            <div className="mt-3 -mx-1 overflow-x-auto">
+              <div className="flex gap-2 px-1 pb-1">
+                {[1, 2, 3, 4, 5].map((l) => (
+                  <span
+                    key={l}
+                    className="inline-flex items-center rounded-full border border-gray-200 bg-gray-50 px-3 py-1 text-xs text-gray-800"
+                  >
+                    L{l}
+                    <span className="ml-1.5 font-semibold">
+                      {counts.levels[String(l)] || 0}
+                    </span>
+                  </span>
+                ))}
+                <span className="inline-flex items-center rounded-full border border-purple-200 bg-purple-50 px-3 py-1 text-xs text-purple-700">
+                  6+
+                  <span className="ml-1.5 font-semibold">{counts.sixPlus || 0}</span>
+                </span>
+              </div>
             </div>
           )}
 
@@ -470,7 +610,7 @@ export default function DashboardPage() {
         </section>
       </main>
 
-      {/* Sticky bottom action bar — only two buttons with exact labels requested */}
+      {/* Sticky bottom action bar — two buttons */}
       <div className="fixed bottom-0 inset-x-0 z-40 border-t border-gray-200 bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/80">
         <div className="mx-auto max-w-4xl px-4 py-2.5 grid grid-cols-2 gap-2">
           <button
@@ -515,10 +655,11 @@ export default function DashboardPage() {
                 </button>
               </div>
               <ol className="mt-3 list-decimal pl-5 space-y-2 text-sm text-gray-700">
-                <li>Use the bottom bar to copy your link or share on WhatsApp.</li>
-                <li>Registrations show in your <strong>Level 1</strong>.</li>
-                <li>Finish <strong>Mission 1 (10/10)</strong>, then help <strong>3</strong> Level 1 reach <strong>10/10</strong>.</li>
-                <li>Tap <strong>+</strong> to drill into deeper levels; open a row to see phone & WhatsApp.</li>
+                <li>Use the bottom bar or QR to invite India Founders.</li>
+                <li>Registrations appear in <strong>Level 1</strong>.</li>
+                <li>Finish <strong>Mission 1 (10/10)</strong>, then help <strong>3</strong> L1 leaders reach <strong>10/10</strong> (Mission 2).</li>
+                <li>Multiply into <strong>Level 2</strong>: support <strong>3</strong> leaders there to reach <strong>10/10</strong> (Mission 3).</li>
+                <li>Tap <strong>+</strong> to drill down. Open a row to view phone & WhatsApp.</li>
               </ol>
             </div>
           </div>
@@ -534,37 +675,38 @@ export default function DashboardPage() {
   }
 }
 
-/** ===== Small UI bits ===== */
+/** ===== Mission card with animated, color-changing ring ===== */
+function MissionWide({ title, subtitle, progress, pct }) {
+  // Animated progress: lerp from displayPct to pct
+  const [displayPct, setDisplayPct] = useState(0);
+  useEffect(() => {
+    let raf;
+    let start;
+    const from = displayPct;
+    const to = pct || 0;
+    const duration = 500; // ms
+    const step = (ts) => {
+      if (!start) start = ts;
+      const t = Math.min(1, (ts - start) / duration);
+      const val = Math.round(from + (to - from) * t);
+      setDisplayPct(val);
+      if (t < 1) raf = requestAnimationFrame(step);
+    };
+    raf = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(raf);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pct]);
 
-function MiniStatCard({ label, value }) {
-  return (
-    <div className="rounded-2xl border border-gray-100 bg-white shadow-sm p-4">
-      <div className="text-[11px] font-medium text-gray-500">{label}</div>
-      <div className="mt-1 text-2xl font-bold text-gray-900">{value}</div>
-    </div>
-  );
-}
-
-// Big, colored mission ring with text to the right
-function MissionWide({ title, subtitle, progress, pct, color = "blue" }) {
-  // ring size
-  const R = 48;                 // radius
-  const C = 2 * Math.PI * R;    // circumference
-  const off = C * (1 - (pct || 0) / 100);
-
-  const colors = {
-    green: { ring: "text-green-500", text: "text-green-700" },
-    blue: { ring: "text-blue-500", text: "text-blue-700" },
-    amber: { ring: "text-amber-500", text: "text-amber-700" },
-    gray: { ring: "text-gray-300", text: "text-gray-600" },
-  };
-  const cl = colors[color] || colors.blue;
+  const color = colorForPct(displayPct);
+  const R = 48;
+  const C = 2 * Math.PI * R;
+  const off = C * (1 - (displayPct || 0) / 100);
 
   return (
     <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm">
       <div className="flex items-center gap-4">
         {/* Left: big ring */}
-        <div className="relative w-[112px] h-[112px]" title={`${pct || 0}%`}>
+        <div className="relative w-[112px] h-[112px]" title={`${displayPct}%`}>
           <svg className="w-[112px] h-[112px]">
             <circle
               className="text-gray-200"
@@ -576,7 +718,7 @@ function MissionWide({ title, subtitle, progress, pct, color = "blue" }) {
               cy="56"
             />
             <circle
-              className={cl.ring}
+              className={color.ring}
               strokeWidth="8"
               strokeLinecap="round"
               stroke="currentColor"
@@ -586,9 +728,10 @@ function MissionWide({ title, subtitle, progress, pct, color = "blue" }) {
               cy="56"
               strokeDasharray={C}
               strokeDashoffset={off}
+              style={{ transition: "stroke-dashoffset 400ms ease" }}
             />
           </svg>
-          <div className={`absolute inset-0 flex items-center justify-center text-sm font-extrabold ${cl.text}`}>
+          <div className={`absolute inset-0 flex items-center justify-center text-sm font-extrabold ${color.text}`}>
             {progress}
           </div>
         </div>
@@ -597,11 +740,18 @@ function MissionWide({ title, subtitle, progress, pct, color = "blue" }) {
         <div className="min-w-0">
           <h4 className="text-sm font-semibold text-gray-900">{title}</h4>
           {subtitle && <p className="mt-1 text-xs text-gray-600">{subtitle}</p>}
-          {/* No CTA button here by design */}
         </div>
       </div>
     </div>
   );
+}
+
+function colorForPct(p) {
+  if (p >= 100) return { ring: "text-green-500", text: "text-green-700" };
+  if (p >= 75) return { ring: "text-blue-500", text: "text-blue-700" };
+  if (p >= 40) return { ring: "text-amber-500", text: "text-amber-700" };
+  if (p > 0) return { ring: "text-red-400", text: "text-red-600" };
+  return { ring: "text-gray-300", text: "text-gray-600" };
 }
 
 /** ===== Team tree ===== */
