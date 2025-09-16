@@ -71,20 +71,28 @@ export default function DashboardPage() {
 
   /** ===== Helpers ===== */
   const normalize = (s) => String(s || "").toLowerCase();
+
+  // Safer referral link (SSR-safe + env fallback).
   const referralLink = () => {
-    if (!userData?.referralId && typeof window === "undefined") return "";
-    const origin = typeof window !== "undefined" ? window.location.origin : "";
-    return `${origin}/register?ref=${userData?.referralId || ""}`;
+    const site =
+      (typeof window !== "undefined" && window.location?.origin) ||
+      process.env.NEXT_PUBLIC_SITE_URL ||
+      "";
+    if (!site) return "";
+    const ref = userData?.referralId || "";
+    return `${site}/register?ref=${ref}`;
   };
+
   const greeting = () => {
     const h = new Date().getHours();
     if (h < 12) return "Good Morning";
     if (h < 18) return "Good Afternoon";
     return "Good Evening";
   };
+
   const handleCopy = () => {
-    if (!userData?.referralId) return;
     const link = referralLink();
+    if (!link) return;
     navigator.clipboard.writeText(link).then(() => {
       setCopySuccess("Referral link copied!");
       setTimeout(() => setCopySuccess(""), 1600);
@@ -158,15 +166,23 @@ export default function DashboardPage() {
     return () => ro.disconnect();
   }, []);
 
+  // Slightly debounce QR regeneration to avoid thrashing on small resizes
+  const qrTimer = useRef(null);
   useEffect(() => {
     const link = referralLink();
     if (!link) return;
-    QRCode.toDataURL(link, { width: qrSize, margin: 0, errorCorrectionLevel: "M" })
-      .then((url) => setQrDataUrl(url))
-      .catch((e) => {
-        console.error("QR generate failed", e);
-        setQrDataUrl("");
-      });
+    if (qrTimer.current) clearTimeout(qrTimer.current);
+    qrTimer.current = setTimeout(() => {
+      QRCode.toDataURL(link, { width: qrSize, margin: 0, errorCorrectionLevel: "M" })
+        .then((url) => setQrDataUrl(url))
+        .catch((e) => {
+          console.error("QR generate failed", e);
+          setQrDataUrl("");
+        });
+    }, 80);
+    return () => {
+      if (qrTimer.current) clearTimeout(qrTimer.current);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [qrSize, userData?.referralId]);
 
