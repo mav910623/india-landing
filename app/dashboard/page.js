@@ -25,93 +25,6 @@ const PAGE_SIZE = 50;
 const L1_GOAL = 10;
 const HELP_TARGET = 3;
 
-/** ===== Small Components ===== */
-function StatCard({ label, value, tone }) {
-  const tones = {
-    green: "bg-green-50 text-green-700 border-green-100",
-    blue: "bg-blue-50 text-blue-700 border-blue-100",
-    purple: "bg-purple-50 text-purple-700 border-purple-100",
-  };
-  return (
-    <div
-      className={`mx-auto max-w-xs rounded-2xl border ${
-        tones[tone] || "border-gray-100"
-      } p-4 text-center shadow-sm`}
-    >
-      <div className="text-xs font-medium opacity-80">{label}</div>
-      <div className="mt-1 text-2xl font-semibold">{value}</div>
-    </div>
-  );
-}
-
-/** ===== Mission Card (big ring + tooltip) ===== */
-function MissionCard({
-  title,
-  subtitle,
-  progress,
-  pct,
-  done,
-  locked,
-  ctaLabel,
-  onCta,
-}) {
-  const R = 34; // radius for ~80px ring
-  const C = 2 * Math.PI * R;
-  const off = C * (1 - (pct || 0) / 100);
-
-  return (
-    <div
-      className={`rounded-2xl border border-gray-100 bg-white/80 p-4 shadow-sm ${
-        locked ? "opacity-50" : ""
-      }`}
-      title="Mission progress"
-    >
-      <h3 className="font-semibold text-gray-900">{title}</h3>
-      {subtitle && <p className="mt-0.5 text-xs text-gray-600">{subtitle}</p>}
-
-      <div className="mt-2 flex items-center gap-3">
-        <div className="relative w-20 h-20" title={`${pct || 0}%`}>
-          <svg className="w-20 h-20">
-            <circle
-              className="text-gray-200"
-              strokeWidth="6"
-              stroke="currentColor"
-              fill="transparent"
-              r={R}
-              cx="40"
-              cy="40"
-            />
-            <circle
-              className={done ? "text-green-500" : "text-blue-500"}
-              strokeWidth="6"
-              strokeLinecap="round"
-              stroke="currentColor"
-              fill="transparent"
-              r={R}
-              cx="40"
-              cy="40"
-              strokeDasharray={C}
-              strokeDashoffset={off}
-            />
-          </svg>
-          <div className="absolute inset-0 flex items-center justify-center text-xs font-bold">
-            {progress}
-          </div>
-        </div>
-
-        <button
-          onClick={onCta}
-          disabled={locked}
-          className="flex-1 rounded-xl bg-blue-600 text-white px-3 py-2 text-sm font-medium hover:bg-blue-700 disabled:bg-gray-300"
-          title={locked ? "Unlock by completing previous mission" : "Go"}
-        >
-          {locked ? "Locked" : ctaLabel}
-        </button>
-      </div>
-    </div>
-  );
-}
-
 export default function DashboardPage() {
   const router = useRouter();
 
@@ -395,7 +308,7 @@ export default function DashboardPage() {
         const toExpand = new Set(expanded);
         if (currentUid) toExpand.add(currentUid);
 
-        for (const hit of (payload.results || [])) {
+        for (const hit of payload.results || []) {
           const path = hit.path || [];
           for (const pid of path) {
             await fetchChildren(pid);
@@ -454,7 +367,7 @@ export default function DashboardPage() {
 
   /** ===== Render ===== */
   return (
-    <div className="min-h-screen bg-white pb-20">
+    <div className="min-h-screen bg-white pb-24">
       {/* Header */}
       <header className="bg-blue-600 text-white shadow-sm">
         <div className="mx-auto max-w-4xl px-4 py-3 flex items-center justify-between">
@@ -465,37 +378,63 @@ export default function DashboardPage() {
               router.push("/login");
             }}
             className="rounded-md bg-blue-500/70 px-3 py-1.5 text-sm hover:bg-blue-500"
-            title="Log out of your account"
+            title="Log out"
           >
             Logout
           </button>
         </div>
       </header>
 
-      <div className="mx-auto max-w-4xl px-4 py-6 sm:py-8">
-        {/* Identity */}
-        <section className="rounded-2xl border border-gray-100 bg-white/80 shadow-sm p-4 sm:p-6">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            {/* Left: greeting & IDs */}
-            <div className="space-y-1">
-              <div className="text-base sm:text-lg font-medium text-gray-900">
-                <span className="text-gray-700">{greeting()}, </span>
-                <span className="font-bold">{userData?.name}</span>
-              </div>
-              {/* Show email now */}
+      <main className="mx-auto max-w-4xl px-4 py-6 sm:py-8">
+        {/* ===== Hero: Greeting + Primary CTA + QR ===== */}
+        <section className="rounded-2xl border border-gray-100 bg-white shadow-sm p-4 sm:p-6">
+          <div className="flex items-center justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-sm text-gray-600">{greeting()},</p>
+              <h2 className="mt-0.5 text-xl font-bold text-gray-900 truncate">
+                {userData?.name || "India Founder"}
+              </h2>
               {userData?.email && (
-                <div className="text-xs text-gray-500">{userData.email}</div>
+                <p className="mt-0.5 text-xs text-gray-500 truncate">{userData.email}</p>
               )}
-              <div className="text-sm text-gray-600">
+
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                <button
+                  onClick={handleCopy}
+                  className="rounded-xl bg-blue-600 text-white px-3 py-2 text-sm font-medium hover:bg-blue-700 active:scale-[0.98]"
+                  title="Copy your referral link"
+                >
+                  Invite India Founders
+                </button>
+                <a
+                  href={`https://wa.me/?text=${encodeURIComponent(
+                    "Ready to be an India Founder? Register using this link and start building team India\n\n" +
+                      referralLink()
+                  )}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700 hover:bg-emerald-100"
+                  title="Share on WhatsApp"
+                >
+                  Share on WhatsApp
+                </a>
+                {copySuccess && (
+                  <span className="text-[11px] text-green-600">{copySuccess}</span>
+                )}
+              </div>
+
+              <div className="mt-3 text-xs text-gray-600">
                 Referral ID:{" "}
                 <span className="font-mono text-blue-700">{userData?.referralId}</span>
+                {upline && (
+                  <>
+                    <span className="mx-2 opacity-40">•</span>
+                    Upline: {upline.name}{" "}
+                    <span className="font-mono text-blue-600">({upline.referralId})</span>
+                  </>
+                )}
               </div>
-              {upline && (
-                <div className="text-xs text-gray-500">
-                  Upline: {upline.name}{" "}
-                  <span className="font-mono text-blue-600">({upline.referralId})</span>
-                </div>
-              )}
+
               {dashError && (
                 <div className="mt-3 rounded-xl bg-amber-50 px-4 py-3 text-sm text-amber-800 border border-amber-200">
                   {dashError}
@@ -503,169 +442,113 @@ export default function DashboardPage() {
               )}
             </div>
 
-            {/* Right: QR card with icon-only actions */}
-            <div className="self-start sm:self-auto w-full sm:w-auto" id="qrShareBlock">
+            {/* QR on the right (auto sizes) */}
+            <div className="shrink-0" id="qrShareBlock">
               <div
                 ref={qrBoxRef}
-                className="rounded-2xl border border-gray-100 bg-white shadow-sm p-4 flex flex-col items-center w-full sm:w-auto"
+                className="rounded-2xl border border-gray-100 bg-white shadow-sm p-3 flex flex-col items-center w-[140px] sm:w-[160px]"
                 title="Share this to invite"
               >
-                <div className="text-xs font-medium text-gray-600 mb-2">Invite with QR</div>
-
-                <div className="flex flex-col items-center" style={{ width: qrSize }}>
-                  <div className="rounded-2xl overflow-hidden shadow-sm ring-1 ring-gray-100">
-                    <Image
-                      src={qrDataUrl || "data:image/gif;base64,R0lGODlhAQABAAAAACw="}
-                      alt="Referral QR"
-                      width={qrSize}
-                      height={qrSize}
-                      priority
-                      unoptimized
-                      className="block"
-                      style={{ width: qrSize, height: qrSize }}
-                    />
-                  </div>
-
-                  {/* Icon bar under QR */}
-                  <div className="mt-2 grid grid-cols-2 gap-2 w-full">
-                    <button
-                      onClick={handleCopy}
-                      aria-label="Copy referral link"
-                      className="rounded-xl bg-blue-600 hover:bg-blue-700 transition flex items-center justify-center"
-                      title="Copy referral link"
-                      style={{ height: Math.max(36, Math.floor(qrSize * 0.28)) }}
-                    >
-                      <svg
-                        xmlns="http://www.w3.org/2000/svg"
-                        width={iconPx}
-                        height={iconPx}
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="white"
-                        strokeWidth="2"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      >
-                        <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-                        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
-                      </svg>
-                    </button>
-                    <a
-                      href={`https://wa.me/?text=${encodeURIComponent(
-                        "Ready to be an India Founder? Register using this link and start building team India\n\n" +
-                          referralLink()
-                      )}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      aria-label="Share on WhatsApp"
-                      className="rounded-xl border border-emerald-200 bg-emerald-50 hover:bg-emerald-100 transition flex items-center justify-center"
-                      title="Share on WhatsApp"
-                      style={{ height: Math.max(36, Math.floor(qrSize * 0.28)) }}
-                    >
-                      <svg
-                        xmlns="http://www.w3.org/2000/svg"
-                        width={iconPx}
-                        height={iconPx}
-                        viewBox="0 0 24 24"
-                        fill="currentColor"
-                        className="text-emerald-700"
-                      >
-                        <path d="M20.52 3.48A11.94 11.94 0 0 0 12.01 0C5.39 0 .04 5.35.04 11.96c0 2.11.55 4.16 1.6 5.99L0 24l6.2-1.62a11.95 11.95 0 0 0 5.81 1.49h.01c6.61 0 11.96-5.35 11.96-11.96 0-3.2-1.25-6.21-3.46-8.42ZM12.02 21.3h-.01a9.29 9.29 0 0 1-4.74-1.3l-.34-.2-3.68.96.98-3.58-.22-.37a9.27 9.27 0 0 1-1.42-4.9c0-5.12 4.17-9.29 9.3-9.29 2.48 0 4.81.96 6.57 2.72a9.25 9.25 0 0 1 2.72 6.57c0 5.13-4.17 9.29-9.3 9.29Zm5.35-6.94c-.29-.15-1.7-.84-1.96-.94-.26-.1-.45-.15-.64.15-.19.29-.74.94-.91 1.13-.17.19-.34.21-.63.07-.29-.15-1.22-.45-2.32-1.43-.86-.77-1.44-1.73-1.61-2.02-.17-.29-.02-.45.13-.6.14-.14.29-.37.43-.56.14-.19.19-.32.29-.53.1-.21.05-.39-.02-.54-.07-.15-.64-1.55-.88-2.12-.23-.56-.47-.49-.64-.5h-.55c-.19 0-.5.07-.76.37-.26.29-1 1-1 2.42s1.03 2.81 1.18 3.01c.15.19 2.03 3.09 4.91 4.34.69.3 1.23.48 1.65.61.69.22 1.31.19 1.8.12.55-.08 1.7-.7 1.94-1.37.24-.67.24-1.24.17-1.36-.07-.12-.26-.19-.55-.34Z" />
-                      </svg>
-                    </a>
-                  </div>
-
-                  {copySuccess && (
-                    <span className="mt-1 text-[11px] text-green-600">{copySuccess}</span>
-                  )}
+                <div className="text-[11px] font-medium text-gray-600 mb-2">Invite with QR</div>
+                <div className="rounded-2xl overflow-hidden shadow-sm ring-1 ring-gray-100">
+                  <Image
+                    src={qrDataUrl || "data:image/gif;base64,R0lGODlhAQABAAAAACw="}
+                    alt="Referral QR"
+                    width={qrSize}
+                    height={qrSize}
+                    priority
+                    unoptimized
+                    className="block"
+                    style={{ width: qrSize, height: qrSize }}
+                  />
+                </div>
+                <div className="mt-2 grid grid-cols-2 gap-2 w-full">
+                  <button
+                    onClick={handleCopy}
+                    aria-label="Copy referral link"
+                    className="rounded-xl bg-blue-600 hover:bg-blue-700 transition flex items-center justify-center"
+                    title="Copy referral link"
+                    style={{ height: Math.max(36, Math.floor(qrSize * 0.28)) }}
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" width={iconPx} height={iconPx} viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                  </button>
+                  <a
+                    href={`https://wa.me/?text=${encodeURIComponent(
+                      "Ready to be an India Founder? Register using this link and start building team India\n\n" +
+                        referralLink()
+                    )}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    aria-label="Share on WhatsApp"
+                    className="rounded-xl border border-emerald-200 bg-emerald-50 hover:bg-emerald-100 transition flex items-center justify-center"
+                    title="Share on WhatsApp"
+                    style={{ height: Math.max(36, Math.floor(qrSize * 0.28)) }}
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" width={iconPx} height={iconPx} viewBox="0 0 24 24" fill="currentColor" className="text-emerald-700"><path d="M20.52 3.48A11.94 11.94 0 0 0 12.01 0C5.39 0 .04 5.35.04 11.96c0 2.11.55 4.16 1.6 5.99L0 24l6.2-1.62a11.95 11.95 0 0 0 5.81 1.49h.01c6.61 0 11.96-5.35 11.96-11.96 0-3.2-1.25-6.21-3.46-8.42ZM12.02 21.3h-.01a9.29 9.29 0 0 1-4.74-1.3l-.34-.2-3.68.96.98-3.58-.22-.37a9.27 9.27 0 0 1-1.42-4.9c0-5.12 4.17-9.29 9.3-9.29 2.48 0 4.81.96 6.57 2.72a9.25 9.25 0 0 1 2.72 6.57c0 5.13-4.17 9.29-9.3 9.29Zm5.35-6.94c-.29-.15-1.7-.84-1.96-.94-.26-.1-.45-.15-.64.15-.19.29-.74.94-.91 1.13-.17.19-.34.21-.63.07-.29-.15-1.22-.45-2.32-1.43-.86-.77-1.44-1.73-1.61-2.02-.17-.29-.02-.45.13-.6.14-.14.29-.37.43-.56.14-.19.19-.32.29-.53.1-.21.05-.39-.02-.54-.07-.15-.64-1.55-.88-2.12-.23-.56-.47-.49-.64-.5h-.55c-.19 0-.5.07-.76.37-.26.29-1 1-1 2.42s1.03 2.81 1.18 3.01c.15.19 2.03 3.09 4.91 4.34.69.3 1.23.48 1.65.61.69.22 1.31.19 1.8.12.55-.08 1.7-.7 1.94-1.37.24-.67.24-1.24.17-1.36-.07-.12-.26-.19-.55-.34Z" /></svg>
+                  </a>
                 </div>
               </div>
             </div>
           </div>
         </section>
 
-        {/* Stats — stronger colors */}
-        <section className="mt-6 text-center">
-          <StatCard label="Total Downlines" value={counts.total} tone="green" />
-          <div className="mt-3 -mx-1 overflow-x-auto">
-            <div
-              className="flex justify-center gap-2 px-1 pb-1"
-              id="levelPills"
-              title="Levels = how far down the team goes"
-            >
-              {[1, 2, 3, 4, 5].map((l) => (
-                <span
-                  key={l}
-                  className="inline-flex items-center rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-xs text-blue-700 font-semibold"
-                >
-                  L{l}
-                  <span className="ml-1.5">{counts.levels[String(l)] || 0}</span>
-                </span>
-              ))}
-              <span className="inline-flex items-center rounded-full border border-purple-300 bg-purple-50 px-3 py-1 text-xs text-purple-700 font-semibold">
-                6+<span className="ml-1.5">{counts.sixPlus || 0}</span>
-              </span>
-            </div>
+        {/* ===== Stats ===== */}
+        <section className="mt-6">
+          <div className="flex flex-wrap items-center justify-center gap-2">
+            <Chip label="Total" value={counts.total} tone="green" />
+            {[1, 2, 3, 4, 5].map((l) => (
+              <Chip key={l} label={`L${l}`} value={counts.levels[String(l)] || 0} tone="blue" />
+            ))}
+            <Chip label="6+" value={counts.sixPlus || 0} tone="purple" />
           </div>
-
           {counts.total === 0 && (
-            <div className="mx-auto mt-4 max-w-md rounded-2xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-800">
+            <p className="mx-auto mt-3 max-w-md text-center text-sm text-blue-800 bg-blue-50 border border-blue-100 rounded-xl px-3 py-2">
               No team yet. Share your link to add your <strong>Level 1</strong>.
-            </div>
+            </p>
           )}
         </section>
 
         {/* ===== Missions ===== */}
         <section className="mt-6">
-          <div className="rounded-2xl border border-gray-100 bg-white/80 shadow-sm p-4 sm:p-6">
-            <div className="grid gap-4 sm:grid-cols-2">
-              {/* Mission 1 */}
-              <MissionCard
-                title="Mission 1: Sponsor 10 India Founders"
-                subtitle="Work on sponsoring your first 10 India Founders"
-                progress={`${counts.levels?.["1"] || 0}/10`}
-                pct={goalPct}
-                done={goalDone}
-                locked={false}
-                ctaLabel="Copy Link"
-                onCta={handleCopy}
-              />
+          <div className="grid gap-3 sm:grid-cols-2">
+            <MissionCard
+              title="Mission 1: Sponsor 10 India Founders"
+              subtitle="Work on sponsoring your first 10 India Founders"
+              progress={`${counts.levels?.["1"] || 0}/10`}
+              pct={goalPct}
+              done={goalDone}
+              locked={false}
+              ctaLabel="Copy Link"
+              onCta={handleCopy}
+            />
 
-              {/* Mission 2 — only show after Mission 1 completed */}
-              {goalDone && (
-                <MissionCard
-                  title="Mission 2: Team Growth"
-                  subtitle="Help 3 of your founders to sponsor 10"
-                  progress={`${Math.min(HELP_TARGET, completedL1)}/3`}
-                  pct={Math.min(100, Math.round((completedL1 / 3) * 100))}
-                  done={completedL1 >= 3}
-                  locked={false}
-                  ctaLabel="View Level 1"
-                  onCta={async () => {
-                    await expandToLevel(1);
-                    document
-                      .getElementById("teamSection")
-                      ?.scrollIntoView({ behavior: "smooth" });
-                  }}
-                />
-              )}
-            </div>
+            {goalDone && (
+              <MissionCard
+                title="Mission 2: Team Growth"
+                subtitle="Help 3 of your founders to sponsor 10"
+                progress={`${Math.min(HELP_TARGET, completedL1)}/3`}
+                pct={Math.min(100, Math.round((completedL1 / 3) * 100))}
+                done={completedL1 >= 3}
+                locked={false}
+                ctaLabel="View Level 1"
+                onCta={async () => {
+                  await expandToLevel(1);
+                  document.getElementById("teamSection")?.scrollIntoView({ behavior: "smooth" });
+                }}
+              />
+            )}
           </div>
         </section>
 
-        {/* Team / Tree */}
+        {/* ===== Team ===== */}
         <section
           id="teamSection"
-          className="mt-8 rounded-2xl border border-gray-100 bg-white/80 shadow-sm p-4 sm:p-6"
+          className="mt-8 rounded-2xl border border-gray-100 bg-white shadow-sm p-4 sm:p-6"
         >
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
             <div>
-              <h2 className="text-lg sm:text-xl font-semibold text-gray-900">
-                Your Team (Tap + to open)
-              </h2>
-              <p className="text-xs text-gray-500 mt-1">
-                Minimal indent for drill down. Search by name / ID.
-              </p>
+              <h3 className="text-lg font-semibold text-gray-900">Your Team</h3>
+              <p className="text-xs text-gray-500 mt-0.5">Tap + to open levels. Search by name/ID.</p>
             </div>
             <div className="flex gap-2">
               <input
@@ -673,7 +556,7 @@ export default function DashboardPage() {
                 value={search}
                 onChange={(e) => handleSearchChange(e.target.value)}
                 placeholder="Search a name or ID…"
-                className="w-full sm:w-60 rounded-xl border border-gray-200 px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full sm:w-64 rounded-xl border border-gray-200 px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
                 title="Try a name or NU-ID"
               />
               <select
@@ -703,27 +586,27 @@ export default function DashboardPage() {
             </div>
           )}
 
-          {/* Root (L0) */}
-          <div className="mt-4">
+          {/* Root */}
+          <div className="mt-3">
             <div className="flex items-center gap-2 mb-2">
               <button
                 id="expandRootBtn"
                 onClick={() => toggleNode(currentUid, 1)}
                 disabled={treeLoading}
-                className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100 active:scale-[0.98] transition"
+                className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100 active:scale-[0.98] transition"
                 title={expanded.has(currentUid) ? "Collapse" : "Expand"}
               >
                 {expanded.has(currentUid) ? "−" : "+"}
               </button>
-              <div className="flex flex-col min-w-0">
-                <div className="text-sm sm:text-base font-medium text-gray-900 truncate">
+              <div className="min-w-0">
+                <div className="text-sm font-medium text-gray-900 truncate">
                   <span className="mr-2 inline-block rounded bg-gray-100 px-2 py-0.5 text-[10px] text-gray-700">
                     L0
                   </span>
                   {userData?.name || "You"}
                 </div>
-                <div className="text-xs text-gray-500 truncate">
-                  <span className="font-mono text-blue-700">{userData?.referralId}</span>
+                <div className="text-xs text-gray-500 truncate font-mono text-blue-700">
+                  {userData?.referralId}
                 </div>
               </div>
             </div>
@@ -742,6 +625,7 @@ export default function DashboardPage() {
                   hasActiveSearch={hasActiveSearch}
                   nodeMatches={nodeMatches}
                   isNodeOrDescendantMatch={isNodeOrDescendantMatch}
+                  // progress props
                   l1Progress={l1Progress}
                   fetchL1Progress={fetchL1Progress}
                 />
@@ -749,14 +633,14 @@ export default function DashboardPage() {
             )}
           </div>
         </section>
-      </div>
+      </main>
 
       {/* Sticky bottom action bar */}
       <div className="fixed bottom-0 inset-x-0 z-40 border-t border-gray-200 bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/80">
-        <div className="mx-auto max-w-4xl px-4 py-2.5 flex items-center gap-2">
+        <div className="mx-auto max-w-4xl px-4 py-2.5 grid grid-cols-3 gap-2">
           <button
             onClick={handleCopy}
-            className="flex-1 rounded-xl bg-blue-600 text-white px-3 py-2 text-sm font-medium hover:bg-blue-700"
+            className="rounded-xl bg-blue-600 text-white px-3 py-2 text-sm font-medium hover:bg-blue-700"
             title="Copy your referral link"
           >
             Copy Link
@@ -768,7 +652,7 @@ export default function DashboardPage() {
             )}`}
             target="_blank"
             rel="noopener noreferrer"
-            className="flex-1 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700 hover:bg-emerald-100 text-center font-medium"
+            className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700 hover:bg-emerald-100 text-center font-medium"
             title="Share on WhatsApp"
           >
             WhatsApp
@@ -778,11 +662,9 @@ export default function DashboardPage() {
             onClick={async (e) => {
               e.preventDefault();
               await expandToLevel(1);
-              document
-                .getElementById("teamSection")
-                ?.scrollIntoView({ behavior: "smooth" });
+              document.getElementById("teamSection")?.scrollIntoView({ behavior: "smooth" });
             }}
-            className="flex-1 rounded-xl border border-gray-200 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 text-center font-medium"
+            className="rounded-xl border border-gray-200 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 text-center font-medium"
             title="Open your team"
           >
             Open Team
@@ -814,7 +696,54 @@ export default function DashboardPage() {
   }
 }
 
-/** ===== TreeChildren with colored L1 badges, champion 🏆, phone shown when expanded, and auto-load more ===== */
+/** ===== Small UI bits ===== */
+function Chip({ label, value, tone }) {
+  const tones = {
+    green: "border-green-200 bg-green-50 text-green-700",
+    blue: "border-blue-200 bg-blue-50 text-blue-700",
+    purple: "border-purple-200 bg-purple-50 text-purple-700",
+  };
+  return (
+    <span className={`inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-semibold ${tones[tone] || "border-gray-200 bg-gray-50 text-gray-700"}`}>
+      {label}
+      <span className="rounded-full bg-white/70 px-2 py-0.5 text-[11px] font-bold shadow-sm border border-white/60">
+        {value}
+      </span>
+    </span>
+  );
+}
+
+function MissionCard({ title, subtitle, progress, pct, done, locked, ctaLabel, onCta }) {
+  const R = 34;
+  const C = 2 * Math.PI * R;
+  const off = C * (1 - (pct || 0) / 100);
+
+  return (
+    <div className={`rounded-2xl border border-gray-100 bg-white p-4 shadow-sm ${locked ? "opacity-60" : ""}`}>
+      <h4 className="text-sm font-semibold text-gray-900">{title}</h4>
+      {subtitle && <p className="text-xs text-gray-600 mt-0.5">{subtitle}</p>}
+      <div className="mt-3 flex items-center gap-4">
+        <div className="relative w-20 h-20" title={`${pct || 0}%`}>
+          <svg className="w-20 h-20">
+            <circle className="text-gray-200" strokeWidth="6" stroke="currentColor" fill="transparent" r={R} cx="40" cy="40" />
+            <circle className={done ? "text-green-500" : "text-blue-500"} strokeWidth="6" strokeLinecap="round" stroke="currentColor" fill="transparent" r={R} cx="40" cy="40" strokeDasharray={C} strokeDashoffset={off} />
+          </svg>
+          <div className="absolute inset-0 flex items-center justify-center text-xs font-bold">{progress}</div>
+        </div>
+        <button
+          onClick={onCta}
+          disabled={locked}
+          className="flex-1 rounded-xl bg-blue-600 text-white px-3 py-2 text-sm font-medium hover:bg-blue-700 disabled:bg-gray-300"
+          title={locked ? "Unlock by completing previous mission" : "Go"}
+        >
+          {locked ? "Locked" : ctaLabel}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/** ===== Tree with colored badges, champion, phone on expand, auto-load more, virtualized when big ===== */
 function TreeChildren({
   parentId,
   level,
@@ -831,36 +760,30 @@ function TreeChildren({
   fetchL1Progress,
 }) {
   const kids = childrenCache[parentId] || [];
-  const filteredKids = hasActiveSearch
-    ? kids.filter((u) => isNodeOrDescendantMatch(u.id))
-    : kids;
+  const filteredKids = hasActiveSearch ? kids.filter((u) => isNodeOrDescendantMatch(u.id)) : kids;
   const manyRows = filteredKids.length > 60;
 
-  // Refs used for both modes
   const parentRef = useRef(null);
   const loadMoreRef = useRef(null);
 
-  // Always call the hook (unconditional)
+  // Always call hook
   const rowVirtualizer = useVirtualizer({
     count: manyRows ? filteredKids.length : 0,
     getScrollElement: () => parentRef.current,
-    estimateSize: () => 64,
+    estimateSize: () => 68,
     overscan: 8,
     measureElement: (el) => el.getBoundingClientRect().height,
   });
 
-  // Progress fetch for visible Level 1 items
+  // Fetch visible L1 progress lazily
   useEffect(() => {
     if (level !== 1) return;
-    const toFetch = filteredKids.slice(0, 100);
-    toFetch.forEach((u) => {
-      if (l1Progress[u.id] === undefined) {
-        fetchL1Progress?.(u.id);
-      }
+    filteredKids.slice(0, 100).forEach((u) => {
+      if (l1Progress[u.id] === undefined) fetchL1Progress?.(u.id);
     });
   }, [level, filteredKids, l1Progress, fetchL1Progress]);
 
-  // Helper: badge color + champion
+  // Badge color + champion
   function badgeStyle(n) {
     if (n === undefined) return "bg-gray-50 text-gray-500 border-gray-200";
     if (n >= 10) return "bg-green-50 text-green-700 border-green-200";
@@ -869,11 +792,10 @@ function TreeChildren({
     return "bg-red-50 text-red-700 border-red-200";
   }
 
-  /** ===== Auto-load sentinel ===== */
   const hasMore = !!nodePages[parentId]?.hasMore;
   useEffect(() => {
     if (!hasMore) return;
-    const rootEl = manyRows ? parentRef.current : null; // virtualized uses container; otherwise viewport
+    const rootEl = manyRows ? parentRef.current : null;
     const io = new IntersectionObserver(
       (entries) => {
         if (entries[0].isIntersecting) {
@@ -894,7 +816,7 @@ function TreeChildren({
     );
   }
 
-  // Non-virtualized list
+  // Non-virtualized list (mobile sets / small sets)
   if (!manyRows) {
     return (
       <div className="relative">
@@ -907,72 +829,70 @@ function TreeChildren({
             const badge = level === 1 ? l1Progress[u.id] : undefined;
 
             return (
-              <li
-                key={u.id}
-                className={`py-2 sm:py-2.5 ${idx % 2 === 0 ? "bg-white" : "bg-gray-50"}`}
-              >
-                <div className="flex items-start sm:items-center justify-between gap-2">
-                  <div className="flex items-start sm:items-center gap-2 min-w-0">
-                    {canDrill ? (
-                      <button
-                        onClick={() => toggleNode(u.id, level + 1)}
-                        className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100 active:scale-[0.98] transition"
-                        title={isOpen ? "Collapse" : "Expand"}
-                      >
-                        {isOpen ? "−" : "+"}
-                      </button>
-                    ) : (
-                      <div className="h-7 w-7" />
-                    )}
+              <li key={u.id} className={`py-2.5 ${idx % 2 === 0 ? "bg-white" : "bg-gray-50"}`}>
+                <div className="flex items-start gap-3">
+                  {canDrill ? (
+                    <button
+                      onClick={() => toggleNode(u.id, level + 1)}
+                      className="mt-0.5 inline-flex h-9 w-9 items-center justify-center rounded-xl border border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100 active:scale-[0.98] transition"
+                      title={isOpen ? "Collapse" : "Expand"}
+                    >
+                      {isOpen ? "−" : "+"}
+                    </button>
+                  ) : (
+                    <div className="h-9 w-9" />
+                  )}
 
-                    <div className={`flex-1 min-w-0 rounded px-1 ${highlight ? "bg-yellow-50" : ""}`}>
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="inline-block rounded bg-gray-100 px-1.5 py-0.5 text-[10px] text-gray-700">
-                          L{level}
+                  <div className={`flex-1 min-w-0 rounded ${highlight ? "bg-yellow-50" : ""}`}>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="inline-block rounded bg-gray-100 px-1.5 py-0.5 text-[10px] text-gray-700">
+                        L{level}
+                      </span>
+                      <span className="font-medium text-gray-900 truncate text-sm">
+                        {u.name || "Unnamed"}
+                      </span>
+
+                      {badge !== undefined && (
+                        <span
+                          className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] border ${badgeStyle(
+                            badge
+                          )}`}
+                          title="Their own Level 1 progress"
+                        >
+                          {badge >= 10 && <span aria-hidden>🏆</span>}
+                          {`${badge}/10`}
                         </span>
-                        <span className="font-medium text-gray-900 truncate">
-                          {u.name || "Unnamed"}
-                        </span>
-
-                        {/* L1 progress badge + champion */}
-                        {badge !== undefined && (
-                          <span
-                            className={`ml-1 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] border ${badgeStyle(badge)}`}
-                            title="Their own Level 1 progress"
-                          >
-                            {badge >= 10 && <span aria-hidden>🏆</span>}
-                            {badge !== undefined ? `${badge}/10` : "…/10"}
-                          </span>
-                        )}
-                      </div>
-
-                      {/* Phone + WhatsApp ONLY when row is opened (mobile-friendly) */}
-                      {isOpen && (
-                        <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-gray-700">
-                          {phoneDigits && (
-                            <>
-                              <span className="font-mono">{u.phone}</span>
-                              <a
-                                className="inline-flex items-center gap-1 rounded-full bg-emerald-50 text-emerald-700 px-2 py-0.5 border border-emerald-100 hover:bg-emerald-100"
-                                href={`https://wa.me/${phoneDigits}?text=${encodeURIComponent(`Hi ${u.name || ""},`)}`}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                title="Message on WhatsApp"
-                              >
-                                WhatsApp
-                              </a>
-                            </>
-                          )}
-                          <span className="opacity-40 hidden sm:inline">•</span>
-                          <span className="font-mono text-blue-700 truncate">{u.referralId}</span>
-                        </div>
                       )}
                     </div>
+
+                    {/* Phone/WA only when expanded (mobile friendly) */}
+                    {isOpen && (
+                      <div className="mt-1.5 flex flex-wrap items-center gap-2 text-xs text-gray-700">
+                        {phoneDigits && (
+                          <>
+                            <span className="font-mono">{u.phone}</span>
+                            <a
+                              className="inline-flex items-center gap-1 rounded-full bg-emerald-50 text-emerald-700 px-2 py-0.5 border border-emerald-100 hover:bg-emerald-100"
+                              href={`https://wa.me/${phoneDigits}?text=${encodeURIComponent(
+                                `Hi ${u.name || ""},`
+                              )}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              title="Message on WhatsApp"
+                            >
+                              WhatsApp
+                            </a>
+                          </>
+                        )}
+                        <span className="opacity-40 hidden sm:inline">•</span>
+                        <span className="font-mono text-blue-700 truncate">{u.referralId}</span>
+                      </div>
+                    )}
                   </div>
                 </div>
 
                 {isOpen && canDrill && (
-                  <div className="mt-2 ml-3 sm:ml-4 border-l border-gray-100 pl-2 sm:pl-3">
+                  <div className="mt-2 ml-5 border-l border-gray-100 pl-3">
                     <TreeChildren
                       parentId={u.id}
                       level={level + 1}
@@ -1007,14 +927,10 @@ function TreeChildren({
     );
   }
 
-  // Virtualized list (large sets)
+  // Virtualized list (big teams)
   return (
     <div className="relative">
       <div ref={parentRef} className="overflow-auto overflow-x-hidden" style={{ maxHeight: 560 }}>
-        <ul className="relative" style={{ height: useVirtualizer.getTotalSize ? 0 : 0 }}>
-          {/* We won't render static height here; real height below via rowVirtualizer */}
-        </ul>
-
         <ul className="relative" style={{ height: rowVirtualizer.getTotalSize() }}>
           {rowVirtualizer.getVirtualItems().map((vi) => {
             const u = filteredKids[vi.index];
@@ -1031,68 +947,69 @@ function TreeChildren({
                 className={`absolute left-0 right-0 ${vi.index % 2 === 0 ? "bg-white" : "bg-gray-50"}`}
                 style={{ transform: `translateY(${vi.start}px)` }}
               >
-                <div className="py-2 sm:py-2.5 border-b border-gray-100">
-                  <div className="flex items-start sm:items-center justify-between gap-2">
-                    <div className="flex items-start sm:items-center gap-2 min-w-0">
-                      {canDrill ? (
-                        <button
-                          onClick={() => toggleNode(u.id, level + 1)}
-                          className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100 active:scale-[0.98] transition"
-                          title={isOpen ? "Collapse" : "Expand"}
-                        >
-                          {isOpen ? "−" : "+"}
-                        </button>
-                      ) : (
-                        <div className="h-7 w-7" />
-                      )}
+                <div className="py-2.5 border-b border-gray-100">
+                  <div className="flex items-start gap-3">
+                    {canDrill ? (
+                      <button
+                        onClick={() => toggleNode(u.id, level + 1)}
+                        className="mt-0.5 inline-flex h-9 w-9 items-center justify-center rounded-xl border border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100 active:scale-[0.98] transition"
+                        title={isOpen ? "Collapse" : "Expand"}
+                      >
+                        {isOpen ? "−" : "+"}
+                      </button>
+                    ) : (
+                      <div className="h-9 w-9" />
+                    )}
 
-                      <div className={`flex-1 min-w-0 rounded px-1 ${highlight ? "bg-yellow-50" : ""}`}>
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className="inline-block rounded bg-gray-100 px-1.5 py-0.5 text-[10px] text-gray-700">
-                            L{level}
+                    <div className={`flex-1 min-w-0 rounded ${highlight ? "bg-yellow-50" : ""}`}>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="inline-block rounded bg-gray-100 px-1.5 py-0.5 text-[10px] text-gray-700">
+                          L{level}
+                        </span>
+                        <span className="font-medium text-gray-900 truncate text-sm">
+                          {u.name || "Unnamed"}
+                        </span>
+
+                        {badge !== undefined && (
+                          <span
+                            className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] border ${badgeStyle(
+                              badge
+                            )}`}
+                            title="Their own Level 1 progress"
+                          >
+                            {badge >= 10 && <span aria-hidden>🏆</span>}
+                            {`${badge}/10`}
                           </span>
-                          <span className="font-medium text-gray-900 truncate">
-                            {u.name || "Unnamed"}
-                          </span>
-
-                          {badge !== undefined && (
-                            <span
-                              className={`ml-1 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] border ${badgeStyle(badge)}`}
-                              title="Their own Level 1 progress"
-                            >
-                              {badge >= 10 && <span aria-hidden>🏆</span>}
-                              {badge !== undefined ? `${badge}/10` : "…/10"}
-                            </span>
-                          )}
-                        </div>
-
-                        {/* Show phone/WA only when expanded */}
-                        {isOpen && (
-                          <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-gray-700">
-                            {phoneDigits && (
-                              <>
-                                <span className="font-mono">{u.phone}</span>
-                                <a
-                                  className="inline-flex items-center gap-1 rounded-full bg-emerald-50 text-emerald-700 px-2 py-0.5 border border-emerald-100 hover:bg-emerald-100"
-                                  href={`https://wa.me/${phoneDigits}?text=${encodeURIComponent(`Hi ${u.name || ""},`)}`}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  title="Message on WhatsApp"
-                                >
-                                  WhatsApp
-                                </a>
-                              </>
-                            )}
-                            <span className="opacity-40 hidden sm:inline">•</span>
-                            <span className="font-mono text-blue-700 truncate">{u.referralId}</span>
-                          </div>
                         )}
                       </div>
+
+                      {isOpen && (
+                        <div className="mt-1.5 flex flex-wrap items-center gap-2 text-xs text-gray-700">
+                          {phoneDigits && (
+                            <>
+                              <span className="font-mono">{u.phone}</span>
+                              <a
+                                className="inline-flex items-center gap-1 rounded-full bg-emerald-50 text-emerald-700 px-2 py-0.5 border border-emerald-100 hover:bg-emerald-100"
+                                href={`https://wa.me/${phoneDigits}?text=${encodeURIComponent(
+                                  `Hi ${u.name || ""},`
+                                )}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                title="Message on WhatsApp"
+                              >
+                                WhatsApp
+                              </a>
+                            </>
+                          )}
+                          <span className="opacity-40 hidden sm:inline">•</span>
+                          <span className="font-mono text-blue-700 truncate">{u.referralId}</span>
+                        </div>
+                      )}
                     </div>
                   </div>
 
                   {isOpen && canDrill && (
-                    <div className="mt-2 ml-3 sm:ml-4 border-l border-gray-100 pl-2 sm:pl-3">
+                    <div className="mt-2 ml-5 border-l border-gray-100 pl-3">
                       <TreeChildren
                         parentId={u.id}
                         level={level + 1}
@@ -1115,7 +1032,6 @@ function TreeChildren({
             );
           })}
 
-          {/* Sentinel for virtualized container */}
           {hasMore && (
             <li
               ref={loadMoreRef}
