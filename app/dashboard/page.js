@@ -5,15 +5,7 @@ import { useRouter } from "next/navigation";
 import { auth, db } from "@/lib/firebase";
 import { onAuthStateChanged, signOut } from "firebase/auth";
 import {
-  doc,
-  getDoc,
-  collection,
-  query,
-  where,
-  getDocs,
-  orderBy,
-  limit,
-  startAfter,
+  doc, getDoc, collection, query, where, getDocs, orderBy, limit, startAfter,
 } from "firebase/firestore";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import QRCode from "qrcode";
@@ -21,10 +13,6 @@ import QRCode from "qrcode";
 /** ===== Constants ===== */
 const MAX_DEPTH = 6;
 const PAGE_SIZE = 50;
-const STORAGE_KEYS = {
-  ONBOARD_V: "india_dash_seenOnboardingV1",
-  COACH_V: "india_dash_seenCoachV1",
-};
 const L1_GOAL = 10;
 const HELP_TARGET = 3;
 
@@ -58,91 +46,44 @@ export default function DashboardPage() {
 
   /** ===== L1 progress (x/10) ===== */
   const [l1Progress, setL1Progress] = useState({});        // userUid -> number (0..10+)
-  const [focusHelp3, setFocusHelp3] = useState(false);     // sort Level 1 by who needs help
+  const [focusHelp3, setFocusHelp3] = useState(false);     // (kept for future toggles)
 
   /** ===== Search ===== */
   const [search, setSearch] = useState("");
   const searchDebounce = useRef(null);
   const hasActiveSearch = useMemo(() => search.trim().length >= 2, [search]);
 
-  /** ===== Clipboard ===== */
+  /** ===== Clipboard / QR ===== */
   const [copySuccess, setCopySuccess] = useState("");
-
-  /** ===== Header menu ===== */
-  const [menuOpen, setMenuOpen] = useState(false);
-
-  /** ===== QR: data URL + responsive size ===== */
   const [qrDataUrl, setQrDataUrl] = useState("");
   const [qrSize, setQrSize] = useState(120);
   const qrBoxRef = useRef(null);
-  const iconPx = Math.min(28, Math.max(18, Math.floor(qrSize * 0.18))); // icon size scales with QR
+  const iconPx = Math.min(28, Math.max(18, Math.floor(qrSize * 0.18)));
 
-  /** ===== Onboarding & Coach-marks ===== */
-  const [showOnboarding, setShowOnboarding] = useState(false);
-  const [onStep, setOnStep] = useState(0); // 0..2
-  const [showCoach, setShowCoach] = useState(false);
-  const [coachStep, setCoachStep] = useState(0); // 0..2
-  const [coachPos, setCoachPos] = useState({ top: 0, left: 0, w: 0, h: 0 });
-  const coachTargets = ["qrShareBlock", "searchInput", "expandRootBtn"];
-
-  /** ===== Coach helpers ===== */
-  const posCoach = (id) => {
-    const el = document.getElementById(id);
-    if (!el) return setCoachPos({ top: 0, left: 0, w: 0, h: 0 });
-    const r = el.getBoundingClientRect();
-    setCoachPos({
-      top: r.top + window.scrollY,
-      left: r.left + window.scrollX,
-      w: r.width,
-      h: r.height,
-    });
-  };
-  const gotoCoach = async (id) => {
-    const el = document.getElementById(id);
-    if (!el) return false;
-    try {
-      el.scrollIntoView({ behavior: "smooth", block: "center", inline: "center" });
-      await new Promise((res) => setTimeout(res, 350));
-      posCoach(id);
-      return true;
-    } catch {
-      posCoach(id);
-      return true;
+  /** ===== Helpers ===== */
+  function normalize(s) {
+    return String(s || "").toLowerCase();
+  }
+  function referralLink() {
+    if (!userData?.referralId && typeof window === "undefined") return "";
+    const origin = typeof window !== "undefined" ? window.location.origin : "";
+    return `${origin}/register?ref=${userData?.referralId || ""}`;
+  }
+  function greeting() {
+    const h = new Date().getHours();
+    if (h < 12) return "Good Morning";
+    if (h < 18) return "Good Afternoon";
+    return "Good Evening";
+  }
+  function handleCopy() {
+    if (userData?.referralId) {
+      const link = referralLink();
+      navigator.clipboard.writeText(link).then(() => {
+        setCopySuccess("Referral link copied!");
+        setTimeout(() => setCopySuccess(""), 2000);
+      });
     }
-  };
-  useEffect(() => {
-    const onScrollOrResize = () => {
-      if (!showCoach) return;
-      posCoach(coachTargets[coachStep]);
-    };
-    window.addEventListener("scroll", onScrollOrResize, { passive: true });
-    window.addEventListener("resize", onScrollOrResize);
-    return () => {
-      window.removeEventListener("scroll", onScrollOrResize);
-      window.removeEventListener("resize", onScrollOrResize);
-    };
-  }, [showCoach, coachStep]);
-
-  /** ===== QR container observer ===== */
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const el = qrBoxRef.current;
-    if (!el || !("ResizeObserver" in window)) {
-      const w = window.innerWidth || 1024;
-      const s = w < 380 ? 96 : w < 640 ? 120 : 160;
-      setQrSize(s);
-      return;
-    }
-    const ro = new ResizeObserver((entries) => {
-      for (const entry of entries) {
-        const cw = entry.contentRect.width || 140;
-        const s = Math.max(96, Math.min(200, Math.floor(cw - 12)));
-        setQrSize(s);
-      }
-    });
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, []);
+  }
 
   /** ===== Init auth ===== */
   useEffect(() => {
@@ -154,21 +95,6 @@ export default function DashboardPage() {
         await loadUser(currentUser.uid);
         await refreshCounts();
         await expandToLevel(1);
-
-        try {
-          const seenOnb = localStorage.getItem(STORAGE_KEYS.ONBOARD_V);
-          const seenCoach = localStorage.getItem(STORAGE_KEYS.COACH_V);
-          if (!seenOnb) {
-            setOnStep(0);
-            setShowOnboarding(true);
-          } else if (!seenCoach) {
-            setTimeout(async () => {
-              setShowCoach(true);
-              setCoachStep(0);
-              await gotoCoach(coachTargets[0]);
-            }, 350);
-          }
-        } catch {}
       }
     });
     return () => unsub();
@@ -213,30 +139,26 @@ export default function DashboardPage() {
     }
   }
 
-  /** ===== Helpers ===== */
-  function normalize(s) {
-    return String(s || "").toLowerCase();
-  }
-  function referralLink() {
-    if (!userData?.referralId && typeof window === "undefined") return "";
-    const origin = typeof window !== "undefined" ? window.location.origin : "";
-    return `${origin}/register?ref=${userData?.referralId || ""}`;
-  }
-  function greeting() {
-    const h = new Date().getHours();
-    if (h < 12) return "Good Morning";
-    if (h < 18) return "Good Afternoon";
-    return "Good Evening";
-  }
-  function handleCopy() {
-    if (userData?.referralId) {
-      const link = referralLink();
-      navigator.clipboard.writeText(link).then(() => {
-        setCopySuccess("Referral link copied!");
-        setTimeout(() => setCopySuccess(""), 2000);
-      });
+  /** ===== QR container observer ===== */
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const el = qrBoxRef.current;
+    if (!el || !("ResizeObserver" in window)) {
+      const w = window.innerWidth || 1024;
+      const s = w < 380 ? 96 : w < 640 ? 120 : 160;
+      setQrSize(s);
+      return;
     }
-  }
+    const ro = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        const cw = entry.contentRect.width || 140;
+        const s = Math.max(96, Math.min(200, Math.floor(cw - 12)));
+        setQrSize(s);
+      }
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
 
   /** ===== QR generator ===== */
   useEffect(() => {
@@ -400,7 +322,10 @@ export default function DashboardPage() {
 
   /** ===== L1 progress helpers ===== */
   async function fetchL1Progress(uid) {
+    // Return cached if present
     if (l1Progress[uid] !== undefined) return l1Progress[uid];
+
+    // Count up to 10 (we only need to know if they reached 10)
     const qy = query(collection(db, "users"), where("upline", "==", uid), limit(11));
     const snap = await getDocs(qy);
     const count = Math.min(10, snap.size >= 10 ? 10 : snap.size);
@@ -408,7 +333,7 @@ export default function DashboardPage() {
     return count;
   }
 
-  // For banner: compute how many L1 have reached 10
+  // For Mission 2: compute how many L1 have reached 10
   const l1Children = childrenCache[currentUid] || [];
   const completedL1 = useMemo(() => {
     let c = 0;
@@ -436,35 +361,18 @@ export default function DashboardPage() {
 
   /** ===== Render ===== */
   return (
-    <div className="min-h-screen bg-white">
+    <div className="min-h-screen bg-white pb-20">
       {/* Header */}
       <header className="bg-blue-600 text-white shadow-sm">
         <div className="mx-auto max-w-4xl px-4 py-3 flex items-center justify-between">
-          <h1 className="text-lg sm:text-xl font-semibold tracking-tight" title="Your personal team space">
-            Team Dashboard
-          </h1>
-          <div className="relative">
-            <button
-              onClick={() => setMenuOpen((v) => !v)}
-              className="rounded-md bg-blue-500/70 px-3 py-1.5 text-sm font-medium hover:bg-blue-500 focus:outline-none"
-            >
-              Menu ▾
-            </button>
-            {menuOpen && (
-              <div className="absolute right-0 mt-2 w-40 rounded-md bg-white text-gray-800 shadow-lg ring-1 ring-black/5">
-                <button
-                  onClick={async () => {
-                    await signOut(auth);
-                    router.push("/login");
-                  }}
-                  className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50"
-                  title="Log out of your account"
-                >
-                  Logout
-                </button>
-              </div>
-            )}
-          </div>
+          <h1 className="text-lg sm:text-xl font-semibold tracking-tight">Team Dashboard</h1>
+          <button
+            onClick={async () => { await signOut(auth); router.push("/login"); }}
+            className="rounded-md bg-blue-500/70 px-3 py-1.5 text-sm hover:bg-blue-500"
+            title="Log out of your account"
+          >
+            Logout
+          </button>
         </div>
       </header>
 
@@ -472,11 +380,16 @@ export default function DashboardPage() {
         {/* Identity */}
         <section className="rounded-2xl border border-gray-100 bg-white/80 shadow-sm p-4 sm:p-6">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            {/* Left: greeting & IDs */}
             <div className="space-y-1">
               <div className="text-base sm:text-lg font-medium text-gray-900">
                 <span className="text-gray-700">{greeting()}, </span>
                 <span className="font-bold">{userData?.name}</span>
               </div>
+              {/* Show email now (requested) */}
+              {userData?.email && (
+                <div className="text-xs text-gray-500">{userData.email}</div>
+              )}
               <div className="text-sm text-gray-600">
                 Referral ID:{" "}
                 <span className="font-mono text-blue-700">{userData?.referralId}</span>
@@ -494,7 +407,7 @@ export default function DashboardPage() {
               )}
             </div>
 
-            {/* QR block */}
+            {/* Right: QR card with icon-only actions */}
             <div className="self-start sm:self-auto w-full sm:w-auto" id="qrShareBlock">
               <div
                 ref={qrBoxRef}
@@ -502,6 +415,7 @@ export default function DashboardPage() {
                 title="Share this to invite"
               >
                 <div className="text-xs font-medium text-gray-600 mb-2">Invite with QR</div>
+
                 <div className="flex flex-col items-center" style={{ width: qrSize }}>
                   <div className="rounded-2xl overflow-hidden shadow-sm ring-1 ring-gray-100">
                     <img
@@ -540,7 +454,7 @@ export default function DashboardPage() {
                     </button>
                     <a
                       href={`https://wa.me/?text=${encodeURIComponent(
-                        `Hey! Join my team here: ${referralLink()}`
+                        "Ready to be an India Founder? Register using this link and start building team India\n\n" + referralLink()
                       )}`}
                       target="_blank"
                       rel="noopener noreferrer"
@@ -571,7 +485,7 @@ export default function DashboardPage() {
           </div>
         </section>
 
-        {/* Stats — centered */}
+        {/* Stats — stronger colors */}
         <section className="mt-6 text-center">
           <StatCard label="Total Downlines" value={counts.total} tone="green" />
           <div className="mt-3 -mx-1 overflow-x-auto">
@@ -579,17 +493,15 @@ export default function DashboardPage() {
               {[1, 2, 3, 4, 5].map((l) => (
                 <span
                   key={l}
-                  className="inline-flex items-center rounded-full border border-gray-200 bg-gray-50 px-3 py-1 text-xs text-gray-800"
+                  className="inline-flex items-center rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-xs text-blue-700 font-semibold"
                 >
                   L{l}
-                  <span className="ml-1.5 font-semibold">
-                    {counts.levels[String(l)] || 0}
-                  </span>
+                  <span className="ml-1.5">{counts.levels[String(l)] || 0}</span>
                 </span>
               ))}
-              <span className="inline-flex items-center rounded-full border border-purple-200 bg-purple-50 px-3 py-1 text-xs text-purple-700">
+              <span className="inline-flex items-center rounded-full border border-purple-300 bg-purple-50 px-3 py-1 text-xs text-purple-700 font-semibold">
                 6+
-                <span className="ml-1.5 font-semibold">{counts.sixPlus || 0}</span>
+                <span className="ml-1.5">{counts.sixPlus || 0}</span>
               </span>
             </div>
           </div>
@@ -601,67 +513,43 @@ export default function DashboardPage() {
           )}
         </section>
 
-        {/* === MISSIONS (replaces old checklist) === */}
+        {/* ===== Missions (replaces old checklist) ===== */}
         <section className="mt-6">
           <div className="rounded-2xl border border-gray-100 bg-white/80 shadow-sm p-4 sm:p-6">
             <div className="grid gap-4 sm:grid-cols-2">
+              {/* Mission 1 */}
               <MissionCard
-                title="Register 10 India Founders"
+                title="Mission 1: Sponsor 10 India Founders"
+                subtitle="Work on sponsoring your first 10 India Founders"
                 progress={`${counts.levels?.["1"] || 0}/10`}
-                pct={Math.min(100, Math.round(((counts.levels?.["1"] || 0) / 10) * 100))}
-                done={(counts.levels?.["1"] || 0) >= 10}
+                pct={goalPct}
+                done={goalDone}
                 locked={false}
                 ctaLabel="Copy Link"
                 onCta={handleCopy}
               />
-              <MissionCard
-                title="Help 3 Level 1 reach 10"
-                progress={`${Math.min(HELP_TARGET, (() => {
-                  const kids = childrenCache[currentUid] || [];
-                  let c = 0;
-                  for (const k of kids) {
-                    const n = l1Progress[k.id];
-                    if (n !== undefined && n >= 10) c++;
-                  }
-                  return c;
-                })())}/3`}
-                pct={(() => {
-                  const kids = childrenCache[currentUid] || [];
-                  let c = 0;
-                  for (const k of kids) {
-                    const n = l1Progress[k.id];
-                    if (n !== undefined && n >= 10) c++;
-                  }
-                  return Math.min(100, Math.round((c / 3) * 100));
-                })()}
-                done={(() => {
-                  const kids = childrenCache[currentUid] || [];
-                  let c = 0;
-                  for (const k of kids) {
-                    const n = l1Progress[k.id];
-                    if (n !== undefined && n >= 10) c++;
-                  }
-                  return c >= 3;
-                })()}
-                locked={!((counts.levels?.["1"] || 0) >= 10)}
-                ctaLabel="View Level 1"
-                onCta={async () => {
-                  await expandToLevel(1);
-                  document.getElementById("teamSection")?.scrollIntoView({ behavior: "smooth" });
-                }}
-              />
-            </div>
 
-            {/* Micro-guide (super short, 5-year-old friendly) */}
-            <ul className="mt-4 grid gap-2 sm:grid-cols-3 text-sm text-gray-700">
-              <li>① <strong>Copy your link</strong></li>
-              <li>② Send to an <strong>India Founder</strong></li>
-              <li>③ They register → shows in <strong>Level 1</strong></li>
-            </ul>
+              {/* Mission 2 — only show after Mission 1 completed */}
+              {goalDone && (
+                <MissionCard
+                  title="Mission 2: Team Growth"
+                  subtitle="Help 3 of your founders to sponsor 10"
+                  progress={`${Math.min(HELP_TARGET, completedL1)}/3`}
+                  pct={Math.min(100, Math.round((completedL1 / 3) * 100))}
+                  done={completedL1 >= 3}
+                  locked={false}
+                  ctaLabel="View Level 1"
+                  onCta={async () => {
+                    await expandToLevel(1);
+                    document.getElementById("teamSection")?.scrollIntoView({ behavior: "smooth" });
+                  }}
+                />
+              )}
+            </div>
           </div>
         </section>
 
-        {/* Team / Tree (unchanged core, but supports “Help 3” focus) */}
+        {/* Team / Tree */}
         <section id="teamSection" className="mt-8 rounded-2xl border border-gray-100 bg-white/80 shadow-sm p-4 sm:p-6">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
             <div>
@@ -750,8 +638,6 @@ export default function DashboardPage() {
                   // progress props
                   l1Progress={l1Progress}
                   fetchL1Progress={fetchL1Progress}
-                  focusHelp3={focusHelp3}
-                  setFocusHelp3={setFocusHelp3}
                 />
               </div>
             )}
@@ -759,105 +645,41 @@ export default function DashboardPage() {
         </section>
       </div>
 
-      {/* ===== Onboarding Modal (3 steps) ===== */}
-      {showOnboarding && (
-        <div className="fixed inset-0 z-[60] bg-black/40 flex items-center justify-center px-4">
-          <div className="w-full max-w-md rounded-2xl border border-gray-100 bg-white shadow-xl">
-            <div className="p-5">
-              {onStep === 0 && (
-                <>
-                  <h3 className="text-lg font-semibold text-gray-900">Meet your sponsor</h3>
-                  <p className="mt-2 text-sm text-gray-600">
-                    You’re part of <strong>{upline?.name || "your leader"}</strong>’s team.
-                  </p>
-                </>
-              )}
-              {onStep === 1 && (
-                <>
-                  <h3 className="text-lg font-semibold text-gray-900">Share your link</h3>
-                  <p className="mt-2 text-sm text-gray-600">
-                    Anyone who uses your link or QR becomes your <strong>Level 1</strong>.
-                  </p>
-                </>
-              )}
-              {onStep === 2 && (
-                <>
-                  <h3 className="text-lg font-semibold text-gray-900">Explore your team</h3>
-                  <p className="mt-2 text-sm text-gray-600">
-                    Tap <strong>+</strong> to open more levels. Use <strong>Search</strong> to find people.
-                  </p>
-                </>
-              )}
-
-              <div className="mt-5 flex items-center justify-between">
-                <button
-                  onClick={() => {
-                    if (onStep === 0) {
-                      try { localStorage.setItem(STORAGE_KEYS.ONBOARD_V, "1"); } catch {}
-                      setShowOnboarding(false);
-                    } else {
-                      setOnStep((s) => Math.max(0, s - 1));
-                    }
-                  }}
-                  className="rounded-xl border border-gray-200 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
-                >
-                  {onStep === 0 ? "Skip" : "Back"}
-                </button>
-                {onStep < 2 ? (
-                  <button
-                    onClick={() => setOnStep((s) => Math.min(2, s + 1))}
-                    className="rounded-xl bg-blue-600 text-white px-4 py-2 text-sm hover:bg-blue-700"
-                  >
-                    Next
-                  </button>
-                ) : (
-                  <button
-                    onClick={() => {
-                      try { localStorage.setItem(STORAGE_KEYS.ONBOARD_V, "1"); } catch {}
-                      setShowOnboarding(false);
-                      setTimeout(async () => {
-                        try {
-                          const seenCoach = localStorage.getItem(STORAGE_KEYS.COACH_V);
-                          if (!seenCoach) {
-                            setShowCoach(true);
-                            setCoachStep(0);
-                            await gotoCoach(coachTargets[0]);
-                          }
-                        } catch {}
-                      }, 150);
-                    }}
-                    className="rounded-xl bg-blue-600 text-white px-4 py-2 text-sm hover:bg-blue-700"
-                  >
-                    Start
-                  </button>
-                )}
-              </div>
-            </div>
-          </div>
+      {/* Sticky bottom action bar */}
+      <div className="fixed bottom-0 inset-x-0 z-40 border-t border-gray-200 bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/80">
+        <div className="mx-auto max-w-4xl px-4 py-2.5 flex items-center gap-2">
+          <button
+            onClick={handleCopy}
+            className="flex-1 rounded-xl bg-blue-600 text-white px-3 py-2 text-sm font-medium hover:bg-blue-700"
+            title="Copy your referral link"
+          >
+            Copy Link
+          </button>
+          <a
+            href={`https://wa.me/?text=${encodeURIComponent(
+              "Ready to be an India Founder? Register using this link and start building team India\n\n" + referralLink()
+            )}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex-1 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700 hover:bg-emerald-100 text-center font-medium"
+            title="Share on WhatsApp"
+          >
+            WhatsApp
+          </a>
+          <a
+            href="#teamSection"
+            onClick={async (e) => {
+              e.preventDefault();
+              await expandToLevel(1);
+              document.getElementById("teamSection")?.scrollIntoView({ behavior: "smooth" });
+            }}
+            className="flex-1 rounded-xl border border-gray-200 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 text-center font-medium"
+            title="Open your team"
+          >
+            Open Team
+          </a>
         </div>
-      )}
-
-      {/* ===== Coach-marks with SPOTLIGHT & tap-to-advance ===== */}
-      {showCoach && (
-        <CoachOverlay
-          coachStep={coachStep}
-          coachPos={coachPos}
-          onNext={async () => {
-            const next = coachStep + 1;
-            if (next >= coachTargets.length) {
-              try { localStorage.setItem(STORAGE_KEYS.COACH_V, "1"); } catch {}
-              setShowCoach(false);
-              return;
-            }
-            setCoachStep(next);
-            await gotoCoach(coachTargets[next]);
-          }}
-          onSkip={() => {
-            try { localStorage.setItem(STORAGE_KEYS.COACH_V, "1"); } catch {}
-            setShowCoach(false);
-          }}
-        />
-      )}
+      </div>
     </div>
   );
 
@@ -883,49 +705,45 @@ export default function DashboardPage() {
   }
 }
 
-/** ===== Mission Cards ===== */
-function MissionCard({ title, progress, pct, done, locked, ctaLabel, onCta }) {
+/** ===== Mission Card (big ring + tooltip) ===== */
+function MissionCard({ title, subtitle, progress, pct, done, locked, ctaLabel, onCta }) {
+  const R = 34; // ring radius for ~80px
+  const C = 2 * Math.PI * R;
+  const off = C * (1 - (pct || 0) / 100);
+
   return (
-    <div className={`rounded-2xl border border-gray-100 bg-white/80 p-4 shadow-sm ${locked ? "opacity-50" : ""}`}>
-      <h3 className="font-semibold text-gray-900 mb-2">{title}</h3>
-      <div className="flex items-center gap-3">
-        <div className="relative w-16 h-16">
-          <svg className="w-16 h-16">
-            <circle
-              className="text-gray-200"
-              strokeWidth="6"
-              stroke="currentColor"
-              fill="transparent"
-              r="26"
-              cx="32"
-              cy="32"
-            />
+    <div className={`rounded-2xl border border-gray-100 bg-white/80 p-4 shadow-sm ${locked ? "opacity-50" : ""}`} title="Mission progress">
+      <h3 className="font-semibold text-gray-900">{title}</h3>
+      {subtitle && <p className="mt-0.5 text-xs text-gray-600">{subtitle}</p>}
+
+      <div className="mt-2 flex items-center gap-3">
+        <div className="relative w-20 h-20" title={`${pct || 0}%`}>
+          <svg className="w-20 h-20">
+            <circle className="text-gray-200" strokeWidth="6" stroke="currentColor" fill="transparent" r={R} cx="40" cy="40" />
             <circle
               className={done ? "text-green-500" : "text-blue-500"}
               strokeWidth="6"
               strokeLinecap="round"
               stroke="currentColor"
               fill="transparent"
-              r="26"
-              cx="32"
-              cy="32"
-              strokeDasharray={2 * Math.PI * 26}
-              strokeDashoffset={2 * Math.PI * 26 * (1 - pct / 100)}
+              r={R}
+              cx="40"
+              cy="40"
+              strokeDasharray={C}
+              strokeDashoffset={off}
             />
           </svg>
-          <div className="absolute inset-0 flex items-center justify-center text-xs font-bold">
-            {progress}
-          </div>
+          <div className="absolute inset-0 flex items-center justify-center text-xs font-bold">{progress}</div>
         </div>
-        <div className="flex-1">
-          <button
-            onClick={onCta}
-            disabled={locked}
-            className="mt-2 w-full rounded-xl bg-blue-600 text-white px-3 py-2 text-sm hover:bg-blue-700 disabled:bg-gray-300"
-          >
-            {locked ? "Locked" : ctaLabel}
-          </button>
-        </div>
+
+        <button
+          onClick={onCta}
+          disabled={locked}
+          className="flex-1 rounded-xl bg-blue-600 text-white px-3 py-2 text-sm font-medium hover:bg-blue-700 disabled:bg-gray-300"
+          title={locked ? "Unlock by completing previous mission" : "Go"}
+        >
+          {locked ? "Locked" : ctaLabel}
+        </button>
       </div>
     </div>
   );
@@ -946,7 +764,7 @@ function StatCard({ label, value, tone }) {
   );
 }
 
-/** TreeChildren with L1 progress badges & optional “Help 3” focus ordering */
+/** ===== TreeChildren with colored L1 badges, champion 🏆, phone shown when expanded, and auto-load more ===== */
 function TreeChildren({
   parentId,
   level,
@@ -961,29 +779,12 @@ function TreeChildren({
   isNodeOrDescendantMatch,
   l1Progress,
   fetchL1Progress,
-  focusHelp3,
-  setFocusHelp3,
 }) {
-  const kidsRaw = childrenCache[parentId] || [];
-  let kids = kidsRaw;
-
-  // If focusing “Help 3” and we’re on Level 1, sort by progress ascending (undefined last)
-  if (focusHelp3 && level === 1) {
-    kids = [...kidsRaw].sort((a, b) => {
-      const av = l1Progress[a.id];
-      const bv = l1Progress[b.id];
-      const aHas = av !== undefined, bHas = bv !== undefined;
-      if (aHas && bHas) return av - bv;
-      if (aHas && !bHas) return -1;
-      if (!aHas && bHas) return 1;
-      return 0;
-    });
-  }
-
+  const kids = childrenCache[parentId] || [];
   const filteredKids = hasActiveSearch ? kids.filter((u) => isNodeOrDescendantMatch(u.id)) : kids;
   const manyRows = filteredKids.length > 60;
 
-  // Kick off progress fetch lazily for visible Level 1 items
+  // Progress fetch for visible Level 1 items
   useEffect(() => {
     if (level !== 1) return;
     const toFetch = filteredKids.slice(0, 100);
@@ -994,14 +795,32 @@ function TreeChildren({
     });
   }, [level, filteredKids, l1Progress, fetchL1Progress]);
 
+  // Helper: badge color + champion
+  function badgeStyle(n) {
+    if (n === undefined) return "bg-gray-50 text-gray-500 border-gray-200";
+    if (n >= 10) return "bg-green-50 text-green-700 border-green-200";
+    if (n >= 8) return "bg-blue-50 text-blue-700 border-blue-200";
+    if (n >= 4) return "bg-amber-50 text-amber-700 border-amber-200";
+    return "bg-red-50 text-red-700 border-red-200";
+  }
+
+  /** ===== Auto-load sentinel ===== */
   const parentRef = useRef(null);
-  const rowVirtualizer = useVirtualizer({
-    count: filteredKids.length,
-    getScrollElement: () => parentRef.current,
-    estimateSize: () => 64,
-    overscan: 8,
-    measureElement: (el) => el.getBoundingClientRect().height,
-  });
+  const loadMoreRef = useRef(null);
+  useEffect(() => {
+    if (!nodePages[parentId]?.hasMore) return;
+    const rootEl = manyRows ? parentRef.current : null; // for virtualized use container; otherwise viewport
+    const io = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting) {
+          fetchChildren(parentId, { append: true });
+        }
+      },
+      { root: rootEl, rootMargin: "200px" }
+    );
+    if (loadMoreRef.current) io.observe(loadMoreRef.current);
+    return () => io.disconnect();
+  }, [nodePages[parentId]?.hasMore, parentId, manyRows, fetchChildren]);
 
   if (filteredKids.length === 0 && !(nodePages[parentId]?.hasMore)) {
     return (
@@ -1011,6 +830,7 @@ function TreeChildren({
     );
   }
 
+  // Non-virtualized list
   if (!manyRows) {
     return (
       <div className="relative">
@@ -1019,8 +839,8 @@ function TreeChildren({
             const isOpen = expanded.has(u.id);
             const canDrill = level < MAX_DEPTH;
             const highlight = hasActiveSearch && nodeMatches(u);
-            const phoneClean = String(u.phone || "").trim();
-            const badge = level === 1 ? l1Progress[u.id] : null;
+            const phoneDigits = String(u.phone || "").replace(/\D/g, "");
+            const badge = level === 1 ? l1Progress[u.id] : undefined;
 
             return (
               <li key={u.id} className={`py-2 sm:py-2.5 ${idx % 2 === 0 ? "bg-white" : "bg-gray-50"}`}>
@@ -1047,36 +867,39 @@ function TreeChildren({
                           {u.name || "Unnamed"}
                         </span>
 
-                        {/* L1 mini progress badge */}
-                        {badge !== null && (
+                        {/* L1 mini progress badge + champion */}
+                        {badge !== undefined && (
                           <span
-                            className={`ml-1 inline-flex items-center rounded-full px-2 py-0.5 text-[10px] border ${
-                              badge >= 10
-                                ? "bg-green-50 text-green-700 border-green-100"
-                                : "bg-blue-50 text-blue-700 border-blue-100"
-                            }`}
+                            className={`ml-1 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] border ${badgeStyle(badge)}`}
                             title="Their own Level 1 progress"
                           >
+                            {badge >= 10 && <span aria-hidden>🏆</span>}
                             {badge !== undefined ? `${badge}/10` : "…/10"}
                           </span>
                         )}
                       </div>
 
-                      <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-gray-600">
-                        {phoneClean && (
-                          <a
-                            className="inline-flex items-center gap-1 rounded-full bg-emerald-50 text-emerald-700 px-2 py-0.5 border border-emerald-100 hover:bg-emerald-100"
-                            href={`https://wa.me/${String(u.phone || "").replace(/\D/g, "")}?text=${encodeURIComponent(`Hi ${u.name || ""},`)}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            title="Message on WhatsApp"
-                          >
-                            <span className="text-[11px]">WhatsApp</span>
-                          </a>
-                        )}
-                        <span className="opacity-40 hidden sm:inline">•</span>
-                        <span className="font-mono text-blue-700 truncate">{u.referralId}</span>
-                      </div>
+                      {/* Show phone + WhatsApp ONLY when row is opened (mobile-friendly) */}
+                      {isOpen && (
+                        <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-gray-700">
+                          {phoneDigits && (
+                            <>
+                              <span className="font-mono">{u.phone}</span>
+                              <a
+                                className="inline-flex items-center gap-1 rounded-full bg-emerald-50 text-emerald-700 px-2 py-0.5 border border-emerald-100 hover:bg-emerald-100"
+                                href={`https://wa.me/${phoneDigits}?text=${encodeURIComponent(`Hi ${u.name || ""},`)}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                title="Message on WhatsApp"
+                              >
+                                WhatsApp
+                              </a>
+                            </>
+                          )}
+                          <span className="opacity-40 hidden sm:inline">•</span>
+                          <span className="font-mono text-blue-700 truncate">{u.referralId}</span>
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -1097,8 +920,6 @@ function TreeChildren({
                       isNodeOrDescendantMatch={isNodeOrDescendantMatch}
                       l1Progress={l1Progress}
                       fetchL1Progress={fetchL1Progress}
-                      focusHelp3={focusHelp3}
-                      setFocusHelp3={setFocusHelp3}
                     />
                   </div>
                 )}
@@ -1108,24 +929,26 @@ function TreeChildren({
         </ul>
 
         {nodePages[parentId]?.hasMore && (
-          <div className="mt-2">
-            <button
-              onClick={() => fetchChildren(parentId, { append: true })}
-              className="text-sm rounded-lg border border-gray-200 px-3 py-1.5 text-gray-700 hover:bg-gray-50"
-            >
-              Load more…
-            </button>
-          </div>
-        )}
-
-        {focusHelp3 && level !== 1 && (
-          <div className="sr-only">{setFocusHelp3(false)}</div>
+          <>
+            <div ref={loadMoreRef} className="h-8 w-full flex items-center justify-center text-xs text-gray-500">
+              Loading more…
+            </div>
+          </>
         )}
       </div>
     );
   }
 
   // Virtualized (large sets)
+  const rowVirtualizer = useVirtualizer({
+    count: filteredKids.length,
+    getScrollElement: () => parentRef.current,
+    estimateSize: () => 64,
+    overscan: 8,
+    measureElement: (el) => el.getBoundingClientRect().height,
+  });
+
+  // Virtualized list with sentinel inside scroll container
   return (
     <div className="relative">
       <div ref={parentRef} className="overflow-auto overflow-x-hidden" style={{ maxHeight: 560 }}>
@@ -1135,8 +958,8 @@ function TreeChildren({
             const isOpen = expanded.has(u.id);
             const canDrill = level < MAX_DEPTH;
             const highlight = hasActiveSearch && nodeMatches(u);
-            const phoneClean = String(u.phone || "").trim();
-            const badge = level === 1 ? l1Progress[u.id] : null;
+            const phoneDigits = String(u.phone || "").replace(/\D/g, "");
+            const badge = level === 1 ? l1Progress[u.id] : undefined;
 
             return (
               <li
@@ -1169,35 +992,38 @@ function TreeChildren({
                             {u.name || "Unnamed"}
                           </span>
 
-                          {badge !== null && (
+                          {badge !== undefined && (
                             <span
-                              className={`ml-1 inline-flex items-center rounded-full px-2 py-0.5 text-[10px] border ${
-                                badge >= 10
-                                  ? "bg-green-50 text-green-700 border-green-100"
-                                  : "bg-blue-50 text-blue-700 border-blue-100"
-                              }`}
+                              className={`ml-1 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] border ${badgeStyle(badge)}`}
                               title="Their own Level 1 progress"
                             >
+                              {badge >= 10 && <span aria-hidden>🏆</span>}
                               {badge !== undefined ? `${badge}/10` : "…/10"}
                             </span>
                           )}
                         </div>
 
-                        <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-gray-600">
-                          {phoneClean && (
-                            <a
-                              className="inline-flex items-center gap-1 rounded-full bg-emerald-50 text-emerald-700 px-2 py-0.5 border border-emerald-100 hover:bg-emerald-100"
-                              href={`https://wa.me/${String(u.phone || "").replace(/\D/g, "")}?text=${encodeURIComponent(`Hi ${u.name || ""},`)}`}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              title="Message on WhatsApp"
-                            >
-                              <span className="text-[11px]">WhatsApp</span>
-                            </a>
-                          )}
-                          <span className="opacity-40 hidden sm:inline">•</span>
-                          <span className="font-mono text-blue-700 truncate">{u.referralId}</span>
-                        </div>
+                        {/* Show phone/WA only when expanded */}
+                        {isOpen && (
+                          <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-gray-700">
+                            {phoneDigits && (
+                              <>
+                                <span className="font-mono">{u.phone}</span>
+                                <a
+                                  className="inline-flex items-center gap-1 rounded-full bg-emerald-50 text-emerald-700 px-2 py-0.5 border border-emerald-100 hover:bg-emerald-100"
+                                  href={`https://wa.me/${phoneDigits}?text=${encodeURIComponent(`Hi ${u.name || ""},`)}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  title="Message on WhatsApp"
+                                >
+                                  WhatsApp
+                                </a>
+                              </>
+                            )}
+                            <span className="opacity-40 hidden sm:inline">•</span>
+                            <span className="font-mono text-blue-700 truncate">{u.referralId}</span>
+                          </div>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -1218,8 +1044,6 @@ function TreeChildren({
                         isNodeOrDescendantMatch={isNodeOrDescendantMatch}
                         l1Progress={l1Progress}
                         fetchL1Progress={fetchL1Progress}
-                        focusHelp3={focusHelp3}
-                        setFocusHelp3={setFocusHelp3}
                       />
                     </div>
                   )}
@@ -1227,81 +1051,27 @@ function TreeChildren({
               </li>
             );
           })}
+
+          {/* Sentinel for virtualized container */}
+          {nodePages[parentId]?.hasMore && (
+            <li
+              ref={loadMoreRef}
+              className="absolute left-0 right-0 h-10 flex items-center justify-center text-xs text-gray-500"
+              style={{ transform: `translateY(${rowVirtualizer.getTotalSize() - 40}px)` }}
+            >
+              Loading more…
+            </li>
+          )}
         </ul>
       </div>
-
-      {nodePages[parentId]?.hasMore && (
-        <div className="mt-2">
-          <button
-            onClick={() => fetchChildren(parentId, { append: true })}
-            className="text-sm rounded-lg border border-gray-200 px-3 py-1.5 text-gray-700 hover:bg-gray-50"
-          >
-            Load more…
-          </button>
-        </div>
-      )}
-
-      {focusHelp3 && level !== 1 && (
-        <div className="sr-only">{setFocusHelp3(false)}</div>
-      )}
     </div>
   );
-}
 
-/** Coach overlay with SPOTLIGHT, tap-to-advance on dimmer */
-function CoachOverlay({ coachStep, coachPos, onNext, onSkip }) {
-  const steps = [
-    { title: "Invite here", body: "Copy or share this to invite." },
-    { title: "Search", body: "Find someone by name or ID." },
-    { title: "Open levels", body: "Tap + to see your next level." },
-  ];
-
-  const padding = 14;
-  const cx = coachPos.left + coachPos.w / 2;
-  const cy = coachPos.top + coachPos.h / 2;
-  const r = Math.max(coachPos.w, coachPos.h) / 2 + padding;
-
-  const viewportH = typeof window !== "undefined" ? window.innerHeight : 800;
-  const placeAbove = cy + r + 180 > viewportH;
-  const bubbleTop = placeAbove ? (cy - r - 120) : (cy + r + 12);
-  const bubbleLeft = Math.max(12, cx - 140);
-
-  const maskStyle = {
-    WebkitMaskImage: `radial-gradient(${r}px at ${cx}px ${cy}px, transparent 99%, black 100%)`,
-    maskImage: `radial-gradient(${r}px at ${cx}px ${cy}px, transparent 99%, black 100%)`,
-  };
-
-  return (
-    <div className="fixed inset-0 z-[70]">
-      <button
-        onClick={onNext}
-        className="absolute inset-0 bg-black/50"
-        style={maskStyle}
-        aria-label="Next"
-        title="Tap to continue"
-      />
-      <div
-        className="absolute w-[280px] rounded-2xl border border-gray-100 bg-white shadow-xl p-4 pointer-events-auto"
-        style={{ top: bubbleTop, left: bubbleLeft }}
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="text-sm font-semibold text-gray-900">{steps[coachStep].title}</div>
-        <div className="mt-1 text-xs text-gray-600">{steps[coachStep].body}</div>
-        <div className="mt-3 flex items-center justify-between">
-          <button
-            onClick={onSkip}
-            className="rounded-xl border border-gray-200 px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-50"
-          >
-            Skip
-          </button>
-          <button
-            onClick={onNext}
-            className="rounded-xl bg-blue-600 text-white px-3 py-1.5 text-xs hover:bg-blue-700"
-          >
-            Next
-          </button>
-        </div>
-      </div>
-    </div>
-  );
+  function badgeStyle(n) {
+    if (n === undefined) return "bg-gray-50 text-gray-500 border-gray-200";
+    if (n >= 10) return "bg-green-50 text-green-700 border-green-200";
+    if (n >= 8) return "bg-blue-50 text-blue-700 border-blue-200";
+    if (n >= 4) return "bg-amber-50 text-amber-700 border-amber-200";
+    return "bg-red-50 text-red-700 border-red-200";
+  }
 }
