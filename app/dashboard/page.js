@@ -19,11 +19,12 @@ import {
 import { useVirtualizer } from "@tanstack/react-virtual";
 import QRCode from "qrcode";
 
-/** ===== Constants ===== */
+/** ===== Constants (tune here if needed) ===== */
 const MAX_DEPTH = 6;
 const PAGE_SIZE = 50;
 const L1_GOAL = 10;
 const HELP_TARGET = 3;
+const VIRTUALIZE_THRESHOLD = 150; // only virtualize when a level shows many rows
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -31,7 +32,6 @@ export default function DashboardPage() {
   /** ===== Identity ===== */
   const [currentUid, setCurrentUid] = useState(null);
   const [userData, setUserData] = useState(null);
-  const [upline, setUpline] = useState(null);
 
   /** ===== Loading & errors ===== */
   const [loading, setLoading] = useState(true);
@@ -46,20 +46,14 @@ export default function DashboardPage() {
     total: 0,
   });
 
-  /** ===== Tree data ===== */
-  const [childrenCache, setChildrenCache] = useState({});
-  const [parentOf, setParentOf] = useState({});
-  const [expanded, setExpanded] = useState(new Set());
-  const [expandLevel, setExpandLevel] = useState(1);
-  const [nodePages, setNodePages] = useState({}); // parentUid -> { items, cursor, hasMore }
+  /** ===== Tree data & expansion ===== */
+  const [childrenCache, setChildrenCache] = useState({}); // parentUid -> children[]
+  const [parentOf, setParentOf] = useState({});            // childUid -> parentUid
+  const [expanded, setExpanded] = useState(new Set());     // expanded node IDs
+  const [nodePages, setNodePages] = useState({});          // parentUid -> { items, cursor, hasMore }
 
-  /** ===== L1 progress (x/10) ===== */
-  const [l1Progress, setL1Progress] = useState({}); // userUid -> number (0..10+)
-
-  /** ===== Search ===== */
-  const [search, setSearch] = useState("");
-  const searchDebounce = useRef(null);
-  const hasActiveSearch = useMemo(() => search.trim().length >= 2, [search]);
+  /** ===== L1 progress cache (x/10) ===== */
+  const [l1Progress, setL1Progress] = useState({});        // userUid -> number (0..10)
 
   /** ===== Clipboard / QR ===== */
   const [copySuccess, setCopySuccess] = useState("");
@@ -68,44 +62,41 @@ export default function DashboardPage() {
   const qrBoxRef = useRef(null);
   const iconPx = Math.min(28, Math.max(18, Math.floor(qrSize * 0.18)));
 
-  /** ===== Help panel ===== */
+  /** ===== Help sheet ===== */
   const [showHelp, setShowHelp] = useState(false);
 
   /** ===== Helpers ===== */
-  function normalize(s) {
-    return String(s || "").toLowerCase();
-  }
-  function referralLink() {
+  const normalize = (s) => String(s || "").toLowerCase();
+  const referralLink = () => {
     if (!userData?.referralId && typeof window === "undefined") return "";
     const origin = typeof window !== "undefined" ? window.location.origin : "";
     return `${origin}/register?ref=${userData?.referralId || ""}`;
-  }
-  function greeting() {
+  };
+  const greeting = () => {
     const h = new Date().getHours();
     if (h < 12) return "Good Morning";
     if (h < 18) return "Good Afternoon";
     return "Good Evening";
-  }
-  function handleCopy() {
-    if (userData?.referralId) {
-      const link = referralLink();
-      navigator.clipboard.writeText(link).then(() => {
-        setCopySuccess("Referral link copied!");
-        setTimeout(() => setCopySuccess(""), 2000);
-      });
-    }
-  }
+  };
+  const handleCopy = () => {
+    if (!userData?.referralId) return;
+    const link = referralLink();
+    navigator.clipboard.writeText(link).then(() => {
+      setCopySuccess("Referral link copied!");
+      setTimeout(() => setCopySuccess(""), 1800);
+    });
+  };
 
-  /** ===== Init auth ===== */
+  /** ===== Auth boot ===== */
   useEffect(() => {
-    const unsub = onAuthStateChanged(auth, async (currentUser) => {
-      if (!currentUser) {
+    const unsub = onAuthStateChanged(auth, async (cu) => {
+      if (!cu) {
         router.push("/login");
       } else {
-        setCurrentUid(currentUser.uid);
-        await loadUser(currentUser.uid);
+        setCurrentUid(cu.uid);
+        await loadUser(cu.uid);
         await refreshCounts();
-        await expandToLevel(1);
+        await expandToLevel(1); // open L1 on load (simple mental model)
       }
     });
     return () => unsub();
@@ -121,13 +112,7 @@ export default function DashboardPage() {
         setLoading(false);
         return;
       }
-      const me = meSnap.data();
-      setUserData(me);
-
-      if (me.upline) {
-        const upSnap = await getDoc(doc(db, "users", me.upline));
-        if (upSnap.exists()) setUpline(upSnap.data());
-      }
+      setUserData(meSnap.data());
     } catch (e) {
       console.error(e);
       setDashError("Failed to load profile.");
@@ -135,7 +120,6 @@ export default function DashboardPage() {
       setLoading(false);
     }
   }
-
   async function refreshCounts() {
     try {
       const token = await auth.currentUser?.getIdToken();
@@ -151,28 +135,26 @@ export default function DashboardPage() {
     }
   }
 
-  /** ===== QR container observer ===== */
+  /** ===== QR: responsive size ===== */
   useEffect(() => {
     if (typeof window === "undefined") return;
     const el = qrBoxRef.current;
     if (!el || !("ResizeObserver" in window)) {
       const w = window.innerWidth || 1024;
-      const s = w < 380 ? 96 : w < 640 ? 120 : 160;
-      setQrSize(s);
+      setQrSize(w < 380 ? 96 : w < 640 ? 120 : 160);
       return;
     }
     const ro = new ResizeObserver((entries) => {
       for (const entry of entries) {
         const cw = entry.contentRect.width || 140;
-        const s = Math.max(96, Math.min(200, Math.floor(cw - 12)));
-        setQrSize(s);
+        setQrSize(Math.max(96, Math.min(200, Math.floor(cw - 12))));
       }
     });
     ro.observe(el);
     return () => ro.disconnect();
   }, []);
 
-  /** ===== QR generator ===== */
+  /** ===== QR: generate dataURL ===== */
   useEffect(() => {
     const link = referralLink();
     if (!link) return;
@@ -185,7 +167,7 @@ export default function DashboardPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [qrSize, userData?.referralId]);
 
-  /** ===== Tree data ===== */
+  /** ===== Tree: fetch children (paged) ===== */
   async function fetchChildren(parentUid, { append = false } = {}) {
     if (!parentUid) return [];
     const page = nodePages[parentUid];
@@ -273,7 +255,6 @@ export default function DashboardPage() {
         frontier = next;
       }
       setExpanded(newExpanded);
-      setExpandLevel(targetLevel);
     } catch (e) {
       console.error(e);
       setTreeError("Expand failed.");
@@ -282,57 +263,7 @@ export default function DashboardPage() {
     }
   }
 
-  function collapseAll() {
-    setExpanded(new Set());
-    setExpandLevel(0);
-  }
-
-  /** ===== Search (server-assisted) ===== */
-  async function handleSearchChange(val) {
-    setSearch(val);
-    if (searchDebounce.current) clearTimeout(searchDebounce.current);
-
-    searchDebounce.current = setTimeout(async () => {
-      const q = normalize(val);
-      if (!q || q.length < 2) {
-        if (expandLevel > 0) await expandToLevel(expandLevel);
-        else collapseAll();
-        return;
-      }
-      try {
-        setTreeLoading(true);
-        const token = await auth.currentUser?.getIdToken();
-        const res = await fetch(`/api/search?q=${encodeURIComponent(q)}`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        const payload = await res.json();
-        if (!res.ok) throw new Error(payload?.error || "Search failed");
-
-        const toExpand = new Set(expanded);
-        if (currentUid) toExpand.add(currentUid);
-
-        for (const hit of payload.results || []) {
-          const path = hit.path || [];
-          for (const pid of path) {
-            await fetchChildren(pid);
-            toExpand.add(pid);
-          }
-          if (hit.user?.upline) {
-            await fetchChildren(hit.user.upline);
-            toExpand.add(hit.user.upline);
-          }
-        }
-        setExpanded(toExpand);
-      } catch (e) {
-        console.error(e);
-        setTreeError("Search failed.");
-      } finally {
-        setTreeLoading(false);
-      }
-    }, 250);
-  }
-
-  /** ===== L1 progress helpers ===== */
+  /** ===== L1 progress (badge) ===== */
   async function fetchL1Progress(uid) {
     if (l1Progress[uid] !== undefined) return l1Progress[uid];
     const qy = query(collection(db, "users"), where("upline", "==", uid), limit(11));
@@ -342,7 +273,7 @@ export default function DashboardPage() {
     return count;
   }
 
-  /** Mission 2 progress — memoized fully */
+  /** Mission 2: completed L1s (>=10) */
   const completedL1 = useMemo(() => {
     const kids = childrenCache[currentUid] || [];
     let c = 0;
@@ -354,12 +285,9 @@ export default function DashboardPage() {
   }, [childrenCache, currentUid, l1Progress]);
 
   const goalDone = (counts.levels?.["1"] || 0) >= L1_GOAL;
-  const goalPct = Math.min(
-    100,
-    Math.round(((counts.levels?.["1"] || 0) / L1_GOAL) * 100)
-  );
+  const goalPct = Math.min(100, Math.round(((counts.levels?.["1"] || 0) / L1_GOAL) * 100));
 
-  /** ===== Loading ===== */
+  /** ===== Loading screen ===== */
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-white">
@@ -368,7 +296,7 @@ export default function DashboardPage() {
     );
   }
 
-  /** ===== Render ===== */
+  /** ===== UI ===== */
   return (
     <div className="min-h-screen bg-white pb-24">
       {/* Header */}
@@ -398,7 +326,7 @@ export default function DashboardPage() {
       </header>
 
       <main className="mx-auto max-w-4xl px-4 py-6 sm:py-8">
-        {/* ===== Hero: Greeting + Primary CTA + QR ===== */}
+        {/* ===== Hero: single CTA + QR ===== */}
         <section className="rounded-2xl border border-gray-100 bg-white shadow-sm p-4 sm:p-6">
           <div className="flex items-center justify-between gap-3">
             <div className="min-w-0">
@@ -406,9 +334,10 @@ export default function DashboardPage() {
               <h2 className="mt-0.5 text-xl font-bold text-gray-900 truncate">
                 {userData?.name || "India Founder"}
               </h2>
-              {userData?.email && (
-                <p className="mt-0.5 text-xs text-gray-500 truncate">{userData.email}</p>
-              )}
+
+              <p className="mt-2 text-sm text-gray-700">
+                Ready to be an India Founder? Register using this link and start building team India.
+              </p>
 
               <div className="mt-3 flex flex-wrap items-center gap-2">
                 <button
@@ -416,7 +345,7 @@ export default function DashboardPage() {
                   className="rounded-xl bg-blue-600 text-white px-3 py-2 text-sm font-medium hover:bg-blue-700 active:scale-[0.98]"
                   title="Copy your referral link"
                 >
-                  Invite India Founders
+                  Copy Invite Link
                 </button>
                 <a
                   href={`https://wa.me/?text=${encodeURIComponent(
@@ -435,18 +364,6 @@ export default function DashboardPage() {
                 )}
               </div>
 
-              <div className="mt-3 text-xs text-gray-600">
-                Referral ID:{" "}
-                <span className="font-mono text-blue-700">{userData?.referralId}</span>
-                {upline && (
-                  <>
-                    <span className="mx-2 opacity-40">•</span>
-                    Upline: {upline.name}{" "}
-                    <span className="font-mono text-blue-600">({upline.referralId})</span>
-                  </>
-                )}
-              </div>
-
               {dashError && (
                 <div className="mt-3 rounded-xl bg-amber-50 px-4 py-3 text-sm text-amber-800 border border-amber-200">
                   {dashError}
@@ -454,7 +371,7 @@ export default function DashboardPage() {
               )}
             </div>
 
-            {/* QR on the right (auto sizes) */}
+            {/* QR (auto-size) */}
             <div className="shrink-0" id="qrShareBlock">
               <div
                 ref={qrBoxRef}
@@ -502,25 +419,14 @@ export default function DashboardPage() {
               </div>
             </div>
           </div>
-        </section>
 
-        {/* ===== Stats ===== */}
-        <section className="mt-6">
-          <div className="flex flex-wrap items-center justify-center gap-2">
-            <Chip label="Total" value={counts.total} tone="green" />
-            {[1, 2, 3, 4, 5].map((l) => (
-              <Chip key={l} label={`L${l}`} value={counts.levels[String(l)] || 0} tone="blue" />
-            ))}
-            <Chip label="6+" value={counts.sixPlus || 0} tone="purple" />
+          {/* Single chip: Total team */}
+          <div className="mt-4">
+            <Chip label="Total team" value={counts.total} tone="green" />
           </div>
-          {counts.total === 0 && (
-            <p className="mx-auto mt-3 max-w-md text-center text-sm text-blue-800 bg-blue-50 border border-blue-100 rounded-xl px-3 py-2">
-              No team yet. Share your link to add your <strong>Level 1</strong>.
-            </p>
-          )}
         </section>
 
-        {/* ===== Missions ===== */}
+        {/* ===== Missions (clear, compact) ===== */}
         <section className="mt-6">
           <div className="grid gap-3 sm:grid-cols-2">
             <MissionCard
@@ -539,8 +445,8 @@ export default function DashboardPage() {
                 title="Mission 2: Team Growth"
                 subtitle="Help 3 of your founders to sponsor 10"
                 progress={`${Math.min(HELP_TARGET, completedL1)}/3`}
-                pct={Math.min(100, Math.round((completedL1 / 3) * 100))}
-                done={completedL1 >= 3}
+                pct={Math.min(100, Math.round((completedL1 / HELP_TARGET) * 100))}
+                done={completedL1 >= HELP_TARGET}
                 locked={false}
                 ctaLabel="View Level 1"
                 onCta={async () => {
@@ -552,114 +458,14 @@ export default function DashboardPage() {
           </div>
         </section>
 
-        {/* ===== Quick Guide (inline, collapsible and mobile-friendly) ===== */}
-        <section className="mt-8 rounded-2xl border border-gray-100 bg-white shadow-sm p-4 sm:p-6">
-          <h3 className="text-lg font-semibold text-gray-900">Quick Guide</h3>
-          <p className="text-xs text-gray-500 mt-1">
-            Start here. These short guidelines keep everyone on track.
-          </p>
-
-          <div className="mt-3 space-y-2">
-            <details className="group rounded-xl border border-gray-100 bg-gray-50 p-3 open:bg-white open:shadow-sm">
-              <summary className="flex cursor-pointer list-none items-center justify-between">
-                <span className="text-sm font-medium text-gray-900">Getting Started</span>
-                <span className="text-gray-400 group-open:rotate-180 transition">⌄</span>
-              </summary>
-              <ul className="mt-2 list-disc pl-5 text-sm text-gray-700 space-y-1">
-                <li>Tap <strong>Invite India Founders</strong> to copy your link.</li>
-                <li>Share by <strong>WhatsApp</strong> or show your <strong>QR</strong> in person.</li>
-                <li>Registrations appear in your <strong>Level 1</strong>.</li>
-              </ul>
-            </details>
-
-            <details className="group rounded-xl border border-gray-100 bg-gray-50 p-3 open:bg-white open:shadow-sm">
-              <summary className="flex cursor-pointer list-none items-center justify-between">
-                <span className="text-sm font-medium text-gray-900">Mission 1 — 10 India Founders</span>
-                <span className="text-gray-400 group-open:rotate-180 transition">⌄</span>
-              </summary>
-              <ul className="mt-2 list-disc pl-5 text-sm text-gray-700 space-y-1">
-                <li>Goal: <strong>10</strong> on Level 1.</li>
-                <li>Progress ring shows <strong>current / 10</strong>.</li>
-                <li>Keep sharing until you hit <strong>10/10</strong>.</li>
-              </ul>
-            </details>
-
-            <details className="group rounded-xl border border-gray-100 bg-gray-50 p-3 open:bg-white open:shadow-sm">
-              <summary className="flex cursor-pointer list-none items-center justify-between">
-                <span className="text-sm font-medium text-gray-900">Mission 2 — Team Growth</span>
-                <span className="text-gray-400 group-open:rotate-180 transition">⌄</span>
-              </summary>
-              <ul className="mt-2 list-disc pl-5 text-sm text-gray-700 space-y-1">
-                <li>Unlocks after Mission 1.</li>
-                <li>Help <strong>3</strong> of your Level 1 reach <strong>10/10</strong> (you’ll see 🏆 next to their names).</li>
-                <li>Open <strong>Your Team</strong> and message them on WhatsApp.</li>
-              </ul>
-            </details>
-
-            <details className="group rounded-xl border border-gray-100 bg-gray-50 p-3 open:bg-white open:shadow-sm">
-              <summary className="flex cursor-pointer list-none items-center justify-between">
-                <span className="text-sm font-medium text-gray-900">Team & Search</span>
-                <span className="text-gray-400 group-open:rotate-180 transition">⌄</span>
-              </summary>
-              <ul className="mt-2 list-disc pl-5 text-sm text-gray-700 space-y-1">
-                <li>Tap <strong>+</strong> to open more levels. Use the dropdown to expand to L1–L6 quickly.</li>
-                <li>Use <strong>Search</strong> (name or ID). We’ll auto-open matching branches for you.</li>
-                <li>Phone & WhatsApp buttons show when a row is <strong>expanded</strong> (mobile-friendly).</li>
-              </ul>
-            </details>
-
-            <details className="group rounded-xl border border-gray-100 bg-gray-50 p-3 open:bg-white open:shadow-sm">
-              <summary className="flex cursor-pointer list-none items-center justify-between">
-                <span className="text-sm font-medium text-gray-900">Best Practices</span>
-                <span className="text-gray-400 group-open:rotate-180 transition">⌄</span>
-              </summary>
-              <ul className="mt-2 list-disc pl-5 text-sm text-gray-700 space-y-1">
-                <li>Send your link with a <strong>short personal note</strong>.</li>
-                <li>Follow up within <strong>24 hours</strong> if they haven’t registered.</li>
-                <li>Celebrate wins—send a quick “🎉 congrats” when someone reaches milestones.</li>
-              </ul>
-            </details>
-          </div>
-        </section>
-
         {/* ===== Team ===== */}
         <section
           id="teamSection"
           className="mt-8 rounded-2xl border border-gray-100 bg-white shadow-sm p-4 sm:p-6"
         >
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-            <div>
-              <h3 className="text-lg font-semibold text-gray-900">Your Team</h3>
-              <p className="text-xs text-gray-500 mt-0.5">Tap + to open levels. Search by name/ID.</p>
-            </div>
-            <div className="flex gap-2">
-              <input
-                id="searchInput"
-                value={search}
-                onChange={(e) => handleSearchChange(e.target.value)}
-                placeholder="Search a name or ID…"
-                className="w-full sm:w-64 rounded-xl border border-gray-200 px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                title="Try a name or NU-ID"
-              />
-              <select
-                value={expandLevel}
-                onChange={async (e) => {
-                  const val = Number(e.target.value);
-                  if (val === 0) collapseAll();
-                  else await expandToLevel(val);
-                }}
-                className="rounded-xl border border-gray-200 px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                title="Open more levels at once"
-              >
-                <option value={0}>Collapse all</option>
-                <option value={1}>Expand to Level 1</option>
-                <option value={2}>Expand to Level 2</option>
-                <option value={3}>Expand to Level 3</option>
-                <option value={4}>Expand to Level 4</option>
-                <option value={5}>Expand to Level 5</option>
-                <option value={6}>Expand to Level 6 (All)</option>
-              </select>
-            </div>
+          <div className="flex items-center justify-between gap-3">
+            <h3 className="text-lg font-semibold text-gray-900">Your Team</h3>
+            {treeLoading && <span className="text-xs text-gray-500">Loading…</span>}
           </div>
 
           {treeError && (
@@ -668,7 +474,7 @@ export default function DashboardPage() {
             </div>
           )}
 
-          {/* Root */}
+          {/* Root (L0) */}
           <div className="mt-3">
             <div className="flex items-center gap-2 mb-2">
               <button
@@ -704,9 +510,6 @@ export default function DashboardPage() {
                   toggleNode={toggleNode}
                   MAX_DEPTH={MAX_DEPTH}
                   fetchChildren={fetchChildren}
-                  hasActiveSearch={hasActiveSearch}
-                  nodeMatches={nodeMatches}
-                  isNodeOrDescendantMatch={isNodeOrDescendantMatch}
                   // progress props
                   l1Progress={l1Progress}
                   fetchL1Progress={fetchL1Progress}
@@ -754,7 +557,7 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* Help panel (lightweight modal) */}
+      {/* Help sheet */}
       {showHelp && (
         <div className="fixed inset-0 z-[70]">
           <button
@@ -763,7 +566,7 @@ export default function DashboardPage() {
             className="absolute inset-0 bg-black/40"
           />
           <div className="absolute inset-x-0 bottom-0 sm:inset-auto sm:top-1/2 sm:left-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 w-full sm:w-[560px]">
-            <div className="m-0 sm:m-0 rounded-t-2xl sm:rounded-2xl border border-gray-100 bg-white shadow-xl p-4 sm:p-5">
+            <div className="rounded-t-2xl sm:rounded-2xl border border-gray-100 bg-white shadow-xl p-4 sm:p-5">
               <div className="flex items-center justify-between">
                 <h4 className="text-base font-semibold text-gray-900">How it works</h4>
                 <button
@@ -773,37 +576,12 @@ export default function DashboardPage() {
                   Close
                 </button>
               </div>
-
               <ol className="mt-3 list-decimal pl-5 space-y-2 text-sm text-gray-700">
-                <li><strong>Copy your link</strong> or show your <strong>QR</strong> to invite India Founders.</li>
-                <li>Watch new registrations appear in <strong>Level 1</strong>.</li>
-                <li>Finish <strong>Mission 1 (10/10)</strong>, then help <strong>3</strong> Level 1 reach <strong>10/10</strong> for Mission 2.</li>
-                <li>Use <strong>Search</strong> and tap <strong>+</strong> to open deeper levels.</li>
-                <li>Open a row to see <strong>Phone</strong> & <strong>WhatsApp</strong> for quick follow-ups.</li>
+                <li>Copy your link or show your QR to invite India Founders.</li>
+                <li>Registrations show in your <strong>Level 1</strong>.</li>
+                <li>Finish <strong>Mission 1 (10/10)</strong>, then help <strong>3</strong> Level 1 reach <strong>10/10</strong>.</li>
+                <li>Tap <strong>+</strong> to drill into deeper levels; open a row to see phone & WhatsApp.</li>
               </ol>
-
-              <div className="mt-4 grid grid-cols-2 gap-2">
-                <a
-                  href="#teamSection"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    setShowHelp(false);
-                    document.getElementById("teamSection")?.scrollIntoView({ behavior: "smooth" });
-                  }}
-                  className="rounded-xl border border-gray-200 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 text-center"
-                >
-                  Go to Team
-                </a>
-                <button
-                  onClick={() => {
-                    setShowHelp(false);
-                    handleCopy();
-                  }}
-                  className="rounded-xl bg-blue-600 text-white px-3 py-2 text-sm hover:bg-blue-700"
-                >
-                  Copy Invite Link
-                </button>
-              </div>
             </div>
           </div>
         </div>
@@ -811,25 +589,11 @@ export default function DashboardPage() {
     </div>
   );
 
-  /** ===== Predicates for search highlighting ===== */
+  /** ===== (local) utility for search highlight — kept minimal if needed later ===== */
   function nodeMatches(u) {
-    const q = normalize(search);
-    if (q.length < 2) return true;
+    // (kept simple; we removed the visible search for declutter)
     const hay = `${normalize(u.name)} ${normalize(u.email)} ${normalize(u.referralId)}`;
-    return hay.includes(q);
-  }
-  function isNodeOrDescendantMatch(nodeId) {
-    const par = parentOf[nodeId];
-    if (par && childrenCache[par]) {
-      const me = childrenCache[par].find((x) => x.id === nodeId);
-      if (me && nodeMatches(me)) return true;
-    }
-    const kids = childrenCache[nodeId] || [];
-    for (const k of kids) {
-      if (nodeMatches(k)) return true;
-      if (isNodeOrDescendantMatch(k.id)) return true;
-    }
-    return false;
+    return !!hay;
   }
 }
 
@@ -880,7 +644,7 @@ function MissionCard({ title, subtitle, progress, pct, done, locked, ctaLabel, o
   );
 }
 
-/** ===== Tree with colored badges, champion on 10, phone on expand, auto-load more, virtualized when big ===== */
+/** ===== Tree: minimal, mobile-first, colored progress badges & 🏆, phone on expand ===== */
 function TreeChildren({
   parentId,
   level,
@@ -890,22 +654,18 @@ function TreeChildren({
   toggleNode,
   MAX_DEPTH,
   fetchChildren,
-  hasActiveSearch,
-  nodeMatches,
-  isNodeOrDescendantMatch,
   l1Progress,
   fetchL1Progress,
 }) {
   const kids = childrenCache[parentId] || [];
-  const filteredKids = hasActiveSearch ? kids.filter((u) => isNodeOrDescendantMatch(u.id)) : kids;
-  const manyRows = filteredKids.length > 60;
+  const manyRows = kids.length > VIRTUALIZE_THRESHOLD;
 
   const parentRef = useRef(null);
   const loadMoreRef = useRef(null);
 
-  // Always call hook
+  // Always call hook (safe for Rules of Hooks); count=0 disables work when not manyRows
   const rowVirtualizer = useVirtualizer({
-    count: manyRows ? filteredKids.length : 0,
+    count: manyRows ? kids.length : 0,
     getScrollElement: () => parentRef.current,
     estimateSize: () => 68,
     overscan: 8,
@@ -915,29 +675,20 @@ function TreeChildren({
   // Fetch visible L1 progress lazily
   useEffect(() => {
     if (level !== 1) return;
-    filteredKids.slice(0, 100).forEach((u) => {
+    kids.slice(0, 120).forEach((u) => {
       if (l1Progress[u.id] === undefined) fetchL1Progress?.(u.id);
     });
-  }, [level, filteredKids, l1Progress, fetchL1Progress]);
-
-  // Badge color + champion
-  function badgeStyle(n) {
-    if (n === undefined) return "bg-gray-50 text-gray-500 border-gray-200";
-    if (n >= 10) return "bg-green-50 text-green-700 border-green-200";
-    if (n >= 8) return "bg-blue-50 text-blue-700 border-blue-200";
-    if (n >= 4) return "bg-amber-50 text-amber-700 border-amber-200";
-    return "bg-red-50 text-red-700 border-red-200";
-  }
+  }, [level, kids, l1Progress, fetchL1Progress]);
 
   const hasMore = !!nodePages[parentId]?.hasMore;
+
+  // Auto-load more (no button clutter)
   useEffect(() => {
     if (!hasMore) return;
     const rootEl = manyRows ? parentRef.current : null;
     const io = new IntersectionObserver(
       (entries) => {
-        if (entries[0].isIntersecting) {
-          fetchChildren(parentId, { append: true });
-        }
+        if (entries[0].isIntersecting) fetchChildren(parentId, { append: true });
       },
       { root: rootEl, rootMargin: "200px" }
     );
@@ -945,23 +696,22 @@ function TreeChildren({
     return () => io.disconnect();
   }, [hasMore, parentId, manyRows, fetchChildren]);
 
-  if (filteredKids.length === 0 && !hasMore) {
-    return (
-      <div className="text-xs sm:text-sm text-gray-500 ml-1 sm:ml-2 py-1">
-        (no members at level {level}) — share your link to grow this level
-      </div>
-    );
-  }
+  const badgeStyle = (n) => {
+    if (n === undefined) return "bg-gray-50 text-gray-500 border-gray-200";
+    if (n >= 10) return "bg-green-50 text-green-700 border-green-200";
+    if (n >= 8) return "bg-blue-50 text-blue-700 border-blue-200";
+    if (n >= 4) return "bg-amber-50 text-amber-700 border-amber-200";
+    return "bg-red-50 text-red-700 border-red-200";
+  };
 
-  // Non-virtualized list (mobile / small sets)
+  // Small list (default)
   if (!manyRows) {
     return (
       <div className="relative">
         <ul className="divide-y divide-gray-100">
-          {filteredKids.map((u, idx) => {
+          {kids.map((u, idx) => {
             const isOpen = expanded.has(u.id);
             const canDrill = level < MAX_DEPTH;
-            const highlight = hasActiveSearch && nodeMatches(u);
             const phoneDigits = String(u.phone || "").replace(/\D/g, "");
             const badge = level === 1 ? l1Progress[u.id] : undefined;
 
@@ -980,7 +730,7 @@ function TreeChildren({
                     <div className="h-9 w-9" />
                   )}
 
-                  <div className={`flex-1 min-w-0 rounded ${highlight ? "bg-yellow-50" : ""}`}>
+                  <div className="flex-1 min-w-0 rounded">
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="inline-block rounded bg-gray-100 px-1.5 py-0.5 text-[10px] text-gray-700">
                         L{level}
@@ -1002,7 +752,7 @@ function TreeChildren({
                       )}
                     </div>
 
-                    {/* Phone/WA only when expanded (mobile friendly) */}
+                    {/* Phone/WhatsApp only when expanded (mobile friendly) */}
                     {isOpen && (
                       <div className="mt-1.5 flex flex-wrap items-center gap-2 text-xs text-gray-700">
                         {phoneDigits && (
@@ -1039,9 +789,6 @@ function TreeChildren({
                       toggleNode={toggleNode}
                       MAX_DEPTH={MAX_DEPTH}
                       fetchChildren={fetchChildren}
-                      hasActiveSearch={hasActiveSearch}
-                      nodeMatches={nodeMatches}
-                      isNodeOrDescendantMatch={isNodeOrDescendantMatch}
                       l1Progress={l1Progress}
                       fetchL1Progress={fetchL1Progress}
                     />
@@ -1064,16 +811,15 @@ function TreeChildren({
     );
   }
 
-  // Virtualized list (big teams)
+  // Virtualized list (very large)
   return (
     <div className="relative">
       <div ref={parentRef} className="overflow-auto overflow-x-hidden" style={{ maxHeight: 560 }}>
         <ul className="relative" style={{ height: rowVirtualizer.getTotalSize() }}>
           {rowVirtualizer.getVirtualItems().map((vi) => {
-            const u = filteredKids[vi.index];
+            const u = kids[vi.index];
             const isOpen = expanded.has(u.id);
             const canDrill = level < MAX_DEPTH;
-            const highlight = hasActiveSearch && nodeMatches(u);
             const phoneDigits = String(u.phone || "").replace(/\D/g, "");
             const badge = level === 1 ? l1Progress[u.id] : undefined;
 
@@ -1098,7 +844,7 @@ function TreeChildren({
                       <div className="h-9 w-9" />
                     )}
 
-                    <div className={`flex-1 min-w-0 rounded ${highlight ? "bg-yellow-50" : ""}`}>
+                    <div className="flex-1 min-w-0 rounded">
                       <div className="flex flex-wrap items-center gap-2">
                         <span className="inline-block rounded bg-gray-100 px-1.5 py-0.5 text-[10px] text-gray-700">
                           L{level}
@@ -1156,9 +902,6 @@ function TreeChildren({
                         toggleNode={toggleNode}
                         MAX_DEPTH={MAX_DEPTH}
                         fetchChildren={fetchChildren}
-                        hasActiveSearch={hasActiveSearch}
-                        nodeMatches={nodeMatches}
-                        isNodeOrDescendantMatch={isNodeOrDescendantMatch}
                         l1Progress={l1Progress}
                         fetchL1Progress={fetchL1Progress}
                       />
@@ -1182,4 +925,12 @@ function TreeChildren({
       </div>
     </div>
   );
+
+  function badgeStyle(n) {
+    if (n === undefined) return "bg-gray-50 text-gray-500 border-gray-200";
+    if (n >= 10) return "bg-green-50 text-green-700 border-green-200";
+    if (n >= 8) return "bg-blue-50 text-blue-700 border-blue-200";
+    if (n >= 4) return "bg-amber-50 text-amber-700 border-amber-200";
+    return "bg-red-50 text-red-700 border-red-200";
+  }
 }
