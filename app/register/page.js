@@ -249,7 +249,25 @@ function RegisterPageInner() {
     let createdAuthUser = null;
 
     try {
-      // PAN uniqueness (optional)
+      // Email uniqueness
+      const emailQ = query(collection(db, "users"), where("email", "==", emailNorm), limit(1));
+      const emailSnap = await getDocs(emailQ);
+      if (!emailSnap.empty) {
+        setRegistering(false);
+        setNotice("❌ This email is already registered.");
+        return;
+      }
+
+      // Phone uniqueness
+      const phoneQ = query(collection(db, "users"), where("phone", "==", e164), limit(1));
+      const phoneSnap = await getDocs(phoneQ);
+      if (!phoneSnap.empty) {
+        setRegistering(false);
+        setNotice("❌ This phone number is already registered.");
+        return;
+      }
+
+      // PAN uniqueness (existing pattern)
       const panQ = query(collection(db, "users"), where("pan", "==", panNorm), limit(1));
       const panSnap = await getDocs(panQ);
       if (!panSnap.empty) {
