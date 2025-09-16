@@ -1,7 +1,8 @@
 "use client";
 
-import { Suspense, useEffect, useMemo, useState } from "react";
-import { useSearchParams, useRouter } from "next/navigation";
+import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
+import Image from "next/image";
 import { auth, db } from "@/lib/firebase";
 import { createUserWithEmailAndPassword, updateProfile } from "firebase/auth";
 import {
@@ -10,22 +11,27 @@ import {
   where,
   getDocs,
   doc,
-  setDoc,
   serverTimestamp,
-  updateDoc,
   arrayUnion,
   writeBatch,
   limit,
 } from "firebase/firestore";
 
-// Ensure this page is treated dynamically (helps with CSR bailout errors)
+/** =========================================================
+ *  Build/runtime hints (CSR)
+ * ======================================================== */
 export const dynamic = "force-dynamic";
 export const fetchCache = "force-no-store";
 
-/* ---------- Helpers (unchanged) ---------- */
-
-function referralIdFromUid(uid) { return "NU" + uid.slice(0, 6).toUpperCase(); }
-function randomReferralCandidate() { return "NU" + Math.random().toString(36).substring(2, 8).toUpperCase(); }
+/** =========================================================
+ *  Helpers
+ * ======================================================== */
+function referralIdFromUid(uid) {
+  return "NU" + uid.slice(0, 6).toUpperCase();
+}
+function randomReferralCandidate() {
+  return "NU" + Math.random().toString(36).substring(2, 8).toUpperCase();
+}
 async function referralIdExists(refId) {
   const qy = query(collection(db, "users"), where("referralId", "==", refId), limit(1));
   const snap = await getDocs(qy);
@@ -42,34 +48,40 @@ async function generateUniqueReferralId(uid) {
 }
 const isValidEmail = (e) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(e || "").trim());
 const hasMinLen = (p) => String(p || "").length >= 8;
-const hasUpper  = (p) => /[A-Z]/.test(String(p || ""));
+const hasUpper = (p) => /[A-Z]/.test(String(p || ""));
 const hasNumber = (p) => /[0-9]/.test(String(p || ""));
 const passwordScore = (p) => [hasMinLen(p), hasUpper(p), hasNumber(p)].filter(Boolean).length;
 
-function unmaskPan(s) { return String(s || "").replace(/[^A-Za-z0-9]/g, "").toUpperCase(); }
+function unmaskPan(s) {
+  return String(s || "").replace(/[^A-Za-z0-9]/g, "").toUpperCase();
+}
 function constrainPanCore(core) {
   const raw = unmaskPan(core).slice(0, 10);
   let out = "";
   for (let i = 0; i < raw.length && out.length < 10; i++) {
-    const ch = raw[i], idx = out.length;
-    if (idx <= 4 || idx === 9) { if (/[A-Z]/.test(ch)) out += ch; }
-    else { if (/[0-9]/.test(ch)) out += ch; }
+    const ch = raw[i],
+      idx = out.length;
+    if (idx <= 4 || idx === 9) {
+      if (/[A-Z]/.test(ch)) out += ch;
+    } else {
+      if (/[0-9]/.test(ch)) out += ch;
+    }
   }
   return out;
 }
 function formatPanMasked(core10) {
   const c = constrainPanCore(core10);
   if (c.length <= 5) return c;
-  if (c.length <= 9) return `${c.slice(0,5)}-${c.slice(5)}`;
-  return `${c.slice(0,5)}-${c.slice(5,9)}-${c.slice(9)}`;
+  if (c.length <= 9) return `${c.slice(0, 5)}-${c.slice(5)}`;
+  return `${c.slice(0, 5)}-${c.slice(5, 9)}-${c.slice(9)}`;
 }
 const isValidPANCore = (core) => /^[A-Z]{5}[0-9]{4}[A-Z]$/.test(core);
 
 const COUNTRIES = [
-  { cc: "IN", flag: "🇮🇳", name: "India", dial: "+91",  example: "9876543210" },
+  { cc: "IN", flag: "🇮🇳", name: "India", dial: "+91", example: "9876543210" },
   { cc: "MY", flag: "🇲🇾", name: "Malaysia", dial: "+60", example: "123456789" },
   { cc: "SG", flag: "🇸🇬", name: "Singapore", dial: "+65", example: "81234567" },
-  { cc: "AE", flag: "🇦🇪", name: "UAE", dial: "+971",   example: "501234567" },
+  { cc: "AE", flag: "🇦🇪", name: "UAE", dial: "+971", example: "501234567" },
   { cc: "US", flag: "🇺🇸", name: "United States", dial: "+1", example: "4155551234" },
 ];
 
@@ -92,24 +104,56 @@ function guessDefaultCountry(local) {
   return COUNTRIES[0];
 }
 
-/* ---------- Wrapper to satisfy Next.js: Suspense around useSearchParams ---------- */
-
+/** =========================================================
+ *  Page Component
+ * ======================================================== */
 export default function RegisterPage() {
-  return (
-    <Suspense fallback={<div className="min-h-screen flex items-center justify-center text-gray-500">Loading…</div>}>
-      <RegisterPageInner />
-    </Suspense>
-  );
-}
+  const router = useRouter();
 
-/* ---------- The original component logic lives here ---------- */
-
-function RegisterPageInner() {
+  // ---------- Steps & Sponsor ----------
   const [step, setStep] = useState(1);
   const [uplineInput, setUplineInput] = useState("");
   const [upline, setUpline] = useState(null);
   const [checkingUpline, setCheckingUpline] = useState(false);
+  const [refLocked, setRefLocked] = useState(false);
 
+  // Capture ?ref=... without useSearchParams (avoids Suspense requirement)
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const p = new URLSearchParams(window.location.search);
+      const ref = (p.get("ref") || "").trim();
+      if (ref) {
+        const up = ref.toUpperCase();
+        setUplineInput(up);
+        setRefLocked(true);
+        // Auto-verify upline on mount if ref present
+        (async () => {
+          setCheckingUpline(true);
+          try {
+            const qy = query(collection(db, "users"), where("referralId", "==", up), limit(1));
+            const snap = await getDocs(qy);
+            if (snap.empty) {
+              setUpline(null);
+              setNotice("❌ Upline not found. Please confirm the Referral ID with your sponsor.");
+            } else {
+              const sDoc = snap.docs[0];
+              setUpline({ id: sDoc.id, ...sDoc.data() });
+              setNotice(`✅ Upline found: ${sDoc.data().name} (${sDoc.data().referralId})`);
+              setStep(2);
+            }
+          } catch (err) {
+            console.error("Upline lookup error (auto):", err);
+            setNotice("Error checking upline. Try again.");
+            setUpline(null);
+          } finally {
+            setCheckingUpline(false);
+          }
+        })();
+      }
+    }
+  }, []);
+
+  // ---------- Form fields ----------
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [emailTouched, setEmailTouched] = useState(false);
@@ -125,41 +169,6 @@ function RegisterPageInner() {
 
   const [registering, setRegistering] = useState(false);
   const [notice, setNotice] = useState("");
-
-  const searchParams = useSearchParams();
-  const refLocked = !!searchParams.get("ref");
-  const router = useRouter();
-
-  // Auto-capture ?ref=
-  useEffect(() => {
-    const ref = searchParams.get("ref");
-    if (!ref) return;
-    const up = String(ref).toUpperCase();
-    setUplineInput(up);
-
-    (async () => {
-      setCheckingUpline(true);
-      try {
-        const qy = query(collection(db, "users"), where("referralId", "==", up), limit(1));
-        const snap = await getDocs(qy);
-        if (snap.empty) {
-          setUpline(null);
-          setNotice("❌ Upline not found. Please confirm the Referral ID with your sponsor.");
-        } else {
-          const sDoc = snap.docs[0];
-          setUpline({ id: sDoc.id, ...sDoc.data() });
-          setNotice(`✅ Upline found: ${sDoc.data().name} (${sDoc.data().referralId})`);
-          setStep(2);
-        }
-      } catch (err) {
-        console.error("Upline lookup error (auto):", err);
-        setNotice("Error checking upline. Try again.");
-        setUpline(null);
-      } finally {
-        setCheckingUpline(false);
-      }
-    })();
-  }, [searchParams]);
 
   // Bias India if phone looks like 10-digit local
   useEffect(() => {
@@ -267,7 +276,7 @@ function RegisterPageInner() {
         return;
       }
 
-      // PAN uniqueness (existing pattern)
+      // PAN uniqueness
       const panQ = query(collection(db, "users"), where("pan", "==", panNorm), limit(1));
       const panSnap = await getDocs(panQ);
       if (!panSnap.empty) {
@@ -280,9 +289,11 @@ function RegisterPageInner() {
       const userCredential = await createUserWithEmailAndPassword(auth, emailNorm, password);
       createdAuthUser = userCredential.user;
       const uid = createdAuthUser.uid;
-      try { await updateProfile(createdAuthUser, { displayName: nameNorm }); } catch {}
+      try {
+        await updateProfile(createdAuthUser, { displayName: nameNorm });
+      } catch {}
 
-      // Referral
+      // Referral ID
       const referralId = await generateUniqueReferralId(uid);
 
       // Atomic write
@@ -311,7 +322,7 @@ function RegisterPageInner() {
       setNotice(`✅ Registered. Your Referral ID: ${referralId}`);
       router.push("/dashboard");
 
-      // Reset
+      // Reset (best effort)
       setStep(1);
       setUplineInput("");
       setUpline(null);
@@ -323,7 +334,9 @@ function RegisterPageInner() {
       setPassword("");
     } catch (err) {
       console.error("Registration error:", err);
-      try { if (createdAuthUser?.delete) await createdAuthUser.delete(); } catch {}
+      try {
+        if (createdAuthUser?.delete) await createdAuthUser.delete();
+      } catch {}
       setNotice(`❌ ${err?.message || "Registration failed. Try again."}`);
     } finally {
       setRegistering(false);
@@ -334,34 +347,64 @@ function RegisterPageInner() {
     () => (country ? `${country.dial} ${country.example}` : ""),
     [country]
   );
-  const pwScoreVal = pwScore;
 
-  /* ---------- UI ---------- */
-
+  /** =========================================================
+   *  UI
+   * ======================================================== */
   return (
-    <div className="min-h-screen bg-white">
-      <div className="mx-auto max-w-4xl px-4 py-6 sm:py-10">
-        <header className="mb-6 sm:mb-8 text-center">
-          <h1 className="text-2xl sm:text-3xl font-semibold tracking-tight text-gray-900">
+    <div className="min-h-screen bg-gradient-to-b from-sky-50 via-white to-white">
+      {/* Subtle ornaments */}
+      <div className="pointer-events-none fixed inset-0 -z-10">
+        <div className="absolute -top-24 -left-16 h-72 w-72 rounded-full bg-blue-100/40 blur-3xl" />
+        <div className="absolute -bottom-16 -right-24 h-72 w-72 rounded-full bg-indigo-100/40 blur-3xl" />
+      </div>
+
+      <div className="mx-auto max-w-3xl px-4 py-10">
+        {/* Brand header */}
+        <div className="mb-6 sm:mb-8 flex flex-col items-center text-center">
+          <div className="rounded-2xl ring-1 ring-gray-100 shadow-sm p-3 bg-white">
+            <Image
+              src="/nuvantage-icon.svg"
+              alt="NuVantage India"
+              width={96}
+              height={96}
+              priority
+              className="block"
+            />
+          </div>
+          <h1 className="mt-4 text-[22px] sm:text-3xl font-semibold tracking-tight text-gray-900">
             India Pre-Registration
           </h1>
-          <p className="mt-1 text-sm text-gray-500">
+          <p className="mt-1 text-sm text-gray-600">
             Verify your sponsor and complete your details.
           </p>
-        </header>
+        </div>
 
-        <div className="rounded-2xl border border-gray-100 bg-white/80 shadow-sm p-4 sm:p-6">
+        <div className="rounded-3xl border border-gray-100/80 bg-white/80 backdrop-blur-sm p-6 sm:p-7 shadow-xl">
           {notice && (
             <div
               className={
                 notice.startsWith("✅")
-                  ? "mb-4 rounded-xl bg-green-50 px-4 py-3 text-sm text-green-800 border border-green-200"
-                  : "mb-4 rounded-xl bg-red-50 px-4 py-3 text-sm text-red-800 border border-red-200"
+                  ? "mb-4 rounded-2xl bg-green-50 px-4 py-3 text-sm text-green-800 border border-green-200"
+                  : "mb-4 rounded-2xl bg-red-50 px-4 py-3 text-sm text-red-800 border border-red-200"
               }
+              role="status"
+              aria-live="polite"
             >
               {notice}
             </div>
           )}
+
+          {/* Step indicator */}
+          <div className="mb-5 flex items-center justify-center gap-2 text-xs text-gray-600">
+            <span className={`px-2.5 py-1 rounded-full border ${step === 1 ? "border-blue-200 bg-blue-50 text-blue-700" : "border-gray-200 bg-gray-50"}`}>
+              1 · Sponsor
+            </span>
+            <span>→</span>
+            <span className={`px-2.5 py-1 rounded-full border ${step === 2 ? "border-blue-200 bg-blue-50 text-blue-700" : "border-gray-200 bg-gray-50"}`}>
+              2 · Your details
+            </span>
+          </div>
 
           {step === 1 && (
             <section>
@@ -374,13 +417,13 @@ function RegisterPageInner() {
                   value={uplineInput}
                   onChange={(e) => setUplineInput(e.target.value.toUpperCase())}
                   placeholder="Enter sponsor Referral ID (e.g. NU12345)"
-                  className="flex-1 rounded-xl border border-gray-200 px-3 py-3 text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="flex-1 rounded-2xl border border-gray-200 px-3 py-3 text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
                   disabled={refLocked}
                 />
                 <button
                   onClick={checkUpline}
                   disabled={checkingUpline}
-                  className="rounded-xl bg-blue-600 text-white px-4 py-3 text-sm font-medium hover:bg-blue-700 active:scale-[0.99] transition disabled:opacity-60"
+                  className="rounded-2xl bg-blue-600 text-white px-4 py-3 text-sm font-semibold hover:bg-blue-700 active:scale-[0.99] transition disabled:opacity-60"
                 >
                   {checkingUpline ? "Checking…" : "Verify"}
                 </button>
@@ -413,7 +456,7 @@ function RegisterPageInner() {
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   placeholder="Full name"
-                  className="w-full rounded-xl border border-gray-200 px-3 py-3 text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full rounded-2xl border border-gray-200 px-3 py-3 text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
 
                 <div>
@@ -423,7 +466,7 @@ function RegisterPageInner() {
                     onBlur={() => setEmailTouched(true)}
                     placeholder="Email address"
                     type="email"
-                    className={`w-full rounded-xl border px-3 py-3 text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 ${
+                    className={`w-full rounded-2xl border px-3 py-3 text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 ${
                       !emailTouched || emailValid
                         ? "border-gray-200 focus:ring-blue-500"
                         : "border-red-300 focus:ring-red-500"
@@ -441,7 +484,7 @@ function RegisterPageInner() {
                       onChange={(e) =>
                         setCountry(COUNTRIES.find((c) => c.cc === e.target.value) || COUNTRIES[0])
                       }
-                      className="w-[46%] sm:w-48 rounded-xl border border-gray-200 px-3 py-3 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-[46%] sm:w-52 rounded-2xl border border-gray-200 px-3 py-3 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
                       title="Country code"
                     >
                       {COUNTRIES.map((c) => (
@@ -456,7 +499,7 @@ function RegisterPageInner() {
                       onChange={(e) => setPhoneLocal(e.target.value)}
                       inputMode="numeric"
                       placeholder={`Phone number (e.g. ${country.example})`}
-                      className="flex-1 rounded-xl border border-gray-200 px-3 py-3 text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="flex-1 rounded-2xl border border-gray-200 px-3 py-3 text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
                     />
                   </div>
                   <p className="mt-2 text-xs text-gray-500">
@@ -473,7 +516,7 @@ function RegisterPageInner() {
                     value={panInput}
                     onChange={(e) => onPanChange(e.target.value)}
                     placeholder="PAN (AAAAA-9999-A)"
-                    className={`w-full rounded-xl border px-3 py-3 text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 ${
+                    className={`w-full rounded-2xl border px-3 py-3 text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 ${
                       !panCore || isValidPANCore(panCore)
                         ? "border-gray-200 focus:ring-blue-500"
                         : "border-red-300 focus:ring-red-500"
@@ -494,17 +537,18 @@ function RegisterPageInner() {
                       onChange={(e) => setPassword(e.target.value)}
                       placeholder="Password"
                       type={pwVisible ? "text" : "password"}
-                      className="w-full rounded-xl border border-gray-200 px-3 py-3 pr-20 text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full rounded-2xl border border-gray-200 px-3 py-3 pr-24 text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
                     />
                     <button
                       type="button"
                       onClick={() => setPwVisible((v) => !v)}
-                      className="absolute right-2 top-1/2 -translate-y-1/2 rounded-lg border border-gray-200 px-2 py-1 text-xs text-gray-700 hover:bg-gray-50"
+                      className="absolute right-2 top-1/2 -translate-y-1/2 rounded-xl border border-gray-200 px-2.5 py-1.5 text-xs text-gray-700 hover:bg-gray-50"
                     >
                       {pwVisible ? "Hide" : "Show"}
                     </button>
                   </div>
 
+                  {/* Password strength */}
                   <div className="mt-2">
                     <div className="h-2 w-full rounded bg-gray-100 overflow-hidden">
                       <div
@@ -521,18 +565,18 @@ function RegisterPageInner() {
                     </div>
                     <div className="mt-2 grid grid-cols-3 gap-2 text-[11px] text-gray-600">
                       <Rule ok={hasMinLen(password)} label="8+ chars" />
-                      <Rule ok={hasUpper(password)}  label="1 uppercase" />
+                      <Rule ok={hasUpper(password)} label="1 uppercase" />
                       <Rule ok={hasNumber(password)} label="1 number" />
                     </div>
                   </div>
                 </div>
               </div>
 
-              <div className="mt-4 flex gap-2">
+              <div className="mt-5 flex gap-2">
                 <button
                   onClick={registerUser}
                   disabled={registering}
-                  className="flex-1 rounded-xl bg-green-600 text-white px-4 py-3 text-sm font-semibold hover:bg-green-700 active:scale-[0.99] transition disabled:opacity-60"
+                  className="flex-1 rounded-2xl bg-green-600 text-white px-4 py-3 text-sm font-semibold hover:bg-green-700 active:scale-[0.99] transition disabled:opacity-60"
                 >
                   {registering ? "Registering…" : "Register & Login"}
                 </button>
@@ -544,7 +588,7 @@ function RegisterPageInner() {
                     setNotice("");
                   }}
                   type="button"
-                  className="rounded-xl border border-gray-200 px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 active:scale-[0.99] transition"
+                  className="rounded-2xl border border-gray-200 px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 active:scale-[0.99] transition"
                 >
                   Back
                 </button>
@@ -559,7 +603,11 @@ function RegisterPageInner() {
   function Rule({ ok, label }) {
     return (
       <div className="flex items-center gap-1">
-        <span className={`inline-block h-2 w-2 rounded-full ${ok ? "bg-green-600" : "bg-gray-300"}`} />
+        <span
+          className={`inline-block h-2 w-2 rounded-full ${
+            ok ? "bg-green-600" : "bg-gray-300"
+          }`}
+        />
         <span className={`${ok ? "text-gray-800" : ""}`}>{label}</span>
       </div>
     );
