@@ -8,12 +8,12 @@ export const metadata = {
   },
   description:
     "NuVantage India Dashboard — Build · Duplicate · Multiply your team with clarity and elegance.",
-  themeColor: "#1e3a8a", // Indigo-900
+  themeColor: "#1e3a8a",
   openGraph: {
     title: "NuVantage India",
     description:
       "Build · Duplicate · Multiply — grow your team with NuVantage India.",
-    url: "https://your-vercel-domain.vercel.app", // update with your live domain
+    url: "https://your-vercel-domain.vercel.app", // TODO: replace with your real domain
     siteName: "NuVantage India",
     images: [
       {
@@ -47,4 +47,8 @@ export const metadata = {
 
 export default function RootLayout({ children }) {
   return (
-    <html lang="en" className="bg-white"
+    <html lang="en" className="bg-white">
+      <body>{children}</body>
+    </html>
+  );
+}
