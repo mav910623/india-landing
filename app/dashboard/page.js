@@ -5,7 +5,15 @@ import { useRouter } from "next/navigation";
 import { auth, db } from "@/lib/firebase";
 import { onAuthStateChanged, signOut } from "firebase/auth";
 import {
-  doc, getDoc, collection, query, where, getDocs, orderBy, limit, startAfter,
+  doc,
+  getDoc,
+  collection,
+  query,
+  where,
+  getDocs,
+  orderBy,
+  limit,
+  startAfter,
 } from "firebase/firestore";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import QRCode from "qrcode";
@@ -38,15 +46,14 @@ export default function DashboardPage() {
   });
 
   /** ===== Tree data ===== */
-  const [childrenCache, setChildrenCache] = useState({}); // parentUid -> children[]
-  const [parentOf, setParentOf] = useState({});            // childUid -> parentUid
-  const [expanded, setExpanded] = useState(new Set());     // expanded node IDs
-  const [expandLevel, setExpandLevel] = useState(1);       // for dropdown
-  const [nodePages, setNodePages] = useState({});          // parentUid -> { items, cursor, hasMore }
+  const [childrenCache, setChildrenCache] = useState({});
+  const [parentOf, setParentOf] = useState({});
+  const [expanded, setExpanded] = useState(new Set());
+  const [expandLevel, setExpandLevel] = useState(1);
+  const [nodePages, setNodePages] = useState({}); // parentUid -> { items, cursor, hasMore }
 
   /** ===== L1 progress (x/10) ===== */
-  const [l1Progress, setL1Progress] = useState({});        // userUid -> number (0..10+)
-  const [focusHelp3, setFocusHelp3] = useState(false);     // (kept for future toggles)
+  const [l1Progress, setL1Progress] = useState({}); // userUid -> number (0..10+)
 
   /** ===== Search ===== */
   const [search, setSearch] = useState("");
@@ -98,6 +105,7 @@ export default function DashboardPage() {
       }
     });
     return () => unsub();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [router]);
 
   /** ===== User & counts ===== */
@@ -322,10 +330,7 @@ export default function DashboardPage() {
 
   /** ===== L1 progress helpers ===== */
   async function fetchL1Progress(uid) {
-    // Return cached if present
     if (l1Progress[uid] !== undefined) return l1Progress[uid];
-
-    // Count up to 10 (we only need to know if they reached 10)
     const qy = query(collection(db, "users"), where("upline", "==", uid), limit(11));
     const snap = await getDocs(qy);
     const count = Math.min(10, snap.size >= 10 ? 10 : snap.size);
@@ -333,16 +338,16 @@ export default function DashboardPage() {
     return count;
   }
 
-  // For Mission 2: compute how many L1 have reached 10
-  const l1Children = childrenCache[currentUid] || [];
+  /** Mission 2 progress — memoized fully */
   const completedL1 = useMemo(() => {
+    const kids = childrenCache[currentUid] || [];
     let c = 0;
-    for (const kid of l1Children) {
+    for (const kid of kids) {
       const n = l1Progress[kid.id];
       if (n !== undefined && n >= 10) c++;
     }
     return c;
-  }, [l1Children, l1Progress]);
+  }, [childrenCache, currentUid, l1Progress]);
 
   const goalDone = (counts.levels?.["1"] || 0) >= L1_GOAL;
   const goalPct = Math.min(
@@ -367,7 +372,10 @@ export default function DashboardPage() {
         <div className="mx-auto max-w-4xl px-4 py-3 flex items-center justify-between">
           <h1 className="text-lg sm:text-xl font-semibold tracking-tight">Team Dashboard</h1>
           <button
-            onClick={async () => { await signOut(auth); router.push("/login"); }}
+            onClick={async () => {
+              await signOut(auth);
+              router.push("/login");
+            }}
             className="rounded-md bg-blue-500/70 px-3 py-1.5 text-sm hover:bg-blue-500"
             title="Log out of your account"
           >
@@ -418,6 +426,7 @@ export default function DashboardPage() {
 
                 <div className="flex flex-col items-center" style={{ width: qrSize }}>
                   <div className="rounded-2xl overflow-hidden shadow-sm ring-1 ring-gray-100">
+                    {/* next/image recommended, leaving img for simplicity */}
                     <img
                       src={qrDataUrl || "data:image/gif;base64,R0lGODlhAQABAAAAACw="}
                       alt="Referral QR"
@@ -454,7 +463,8 @@ export default function DashboardPage() {
                     </button>
                     <a
                       href={`https://wa.me/?text=${encodeURIComponent(
-                        "Ready to be an India Founder? Register using this link and start building team India\n\n" + referralLink()
+                        "Ready to be an India Founder? Register using this link and start building team India\n\n" +
+                          referralLink()
                       )}`}
                       target="_blank"
                       rel="noopener noreferrer"
@@ -489,7 +499,11 @@ export default function DashboardPage() {
         <section className="mt-6 text-center">
           <StatCard label="Total Downlines" value={counts.total} tone="green" />
           <div className="mt-3 -mx-1 overflow-x-auto">
-            <div className="flex justify-center gap-2 px-1 pb-1" id="levelPills" title="Levels = how far down the team goes">
+            <div
+              className="flex justify-center gap-2 px-1 pb-1"
+              id="levelPills"
+              title="Levels = how far down the team goes"
+            >
               {[1, 2, 3, 4, 5].map((l) => (
                 <span
                   key={l}
@@ -500,8 +514,7 @@ export default function DashboardPage() {
                 </span>
               ))}
               <span className="inline-flex items-center rounded-full border border-purple-300 bg-purple-50 px-3 py-1 text-xs text-purple-700 font-semibold">
-                6+
-                <span className="ml-1.5">{counts.sixPlus || 0}</span>
+                6+<span className="ml-1.5">{counts.sixPlus || 0}</span>
               </span>
             </div>
           </div>
@@ -541,7 +554,9 @@ export default function DashboardPage() {
                   ctaLabel="View Level 1"
                   onCta={async () => {
                     await expandToLevel(1);
-                    document.getElementById("teamSection")?.scrollIntoView({ behavior: "smooth" });
+                    document
+                      .getElementById("teamSection")
+                      ?.scrollIntoView({ behavior: "smooth" });
                   }}
                 />
               )}
@@ -550,7 +565,10 @@ export default function DashboardPage() {
         </section>
 
         {/* Team / Tree */}
-        <section id="teamSection" className="mt-8 rounded-2xl border border-gray-100 bg-white/80 shadow-sm p-4 sm:p-6">
+        <section
+          id="teamSection"
+          className="mt-8 rounded-2xl border border-gray-100 bg-white/80 shadow-sm p-4 sm:p-6"
+        >
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
             <div>
               <h2 className="text-lg sm:text-xl font-semibold text-gray-900">
@@ -657,7 +675,8 @@ export default function DashboardPage() {
           </button>
           <a
             href={`https://wa.me/?text=${encodeURIComponent(
-              "Ready to be an India Founder? Register using this link and start building team India\n\n" + referralLink()
+              "Ready to be an India Founder? Register using this link and start building team India\n\n" +
+                referralLink()
             )}`}
             target="_blank"
             rel="noopener noreferrer"
@@ -671,7 +690,9 @@ export default function DashboardPage() {
             onClick={async (e) => {
               e.preventDefault();
               await expandToLevel(1);
-              document.getElementById("teamSection")?.scrollIntoView({ behavior: "smooth" });
+              document
+                .getElementById("teamSection")
+                ?.scrollIntoView({ behavior: "smooth" });
             }}
             className="flex-1 rounded-xl border border-gray-200 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 text-center font-medium"
             title="Open your team"
@@ -706,20 +727,42 @@ export default function DashboardPage() {
 }
 
 /** ===== Mission Card (big ring + tooltip) ===== */
-function MissionCard({ title, subtitle, progress, pct, done, locked, ctaLabel, onCta }) {
-  const R = 34; // ring radius for ~80px
+function MissionCard({
+  title,
+  subtitle,
+  progress,
+  pct,
+  done,
+  locked,
+  ctaLabel,
+  onCta,
+}) {
+  const R = 34; // radius for ~80px ring
   const C = 2 * Math.PI * R;
   const off = C * (1 - (pct || 0) / 100);
 
   return (
-    <div className={`rounded-2xl border border-gray-100 bg-white/80 p-4 shadow-sm ${locked ? "opacity-50" : ""}`} title="Mission progress">
+    <div
+      className={`rounded-2xl border border-gray-100 bg-white/80 p-4 shadow-sm ${
+        locked ? "opacity-50" : ""
+      }`}
+      title="Mission progress"
+    >
       <h3 className="font-semibold text-gray-900">{title}</h3>
       {subtitle && <p className="mt-0.5 text-xs text-gray-600">{subtitle}</p>}
 
       <div className="mt-2 flex items-center gap-3">
         <div className="relative w-20 h-20" title={`${pct || 0}%`}>
           <svg className="w-20 h-20">
-            <circle className="text-gray-200" strokeWidth="6" stroke="currentColor" fill="transparent" r={R} cx="40" cy="40" />
+            <circle
+              className="text-gray-200"
+              strokeWidth="6"
+              stroke="currentColor"
+              fill="transparent"
+              r={R}
+              cx="40"
+              cy="40"
+            />
             <circle
               className={done ? "text-green-500" : "text-blue-500"}
               strokeWidth="6"
@@ -733,7 +776,9 @@ function MissionCard({ title, subtitle, progress, pct, done, locked, ctaLabel, o
               strokeDashoffset={off}
             />
           </svg>
-          <div className="absolute inset-0 flex items-center justify-center text-xs font-bold">{progress}</div>
+          <div className="absolute inset-0 flex items-center justify-center text-xs font-bold">
+            {progress}
+          </div>
         </div>
 
         <button
@@ -745,21 +790,6 @@ function MissionCard({ title, subtitle, progress, pct, done, locked, ctaLabel, o
           {locked ? "Locked" : ctaLabel}
         </button>
       </div>
-    </div>
-  );
-}
-
-/** ===== Small Components ===== */
-function StatCard({ label, value, tone }) {
-  const tones = {
-    green: "bg-green-50 text-green-700 border-green-100",
-    blue: "bg-blue-50 text-blue-700 border-blue-100",
-    purple: "bg-purple-50 text-purple-700 border-purple-100",
-  };
-  return (
-    <div className={`mx-auto max-w-xs rounded-2xl border ${tones[tone] || "border-gray-100"} p-4 text-center shadow-sm`}>
-      <div className="text-xs font-medium opacity-80">{label}</div>
-      <div className="mt-1 text-2xl font-semibold">{value}</div>
     </div>
   );
 }
@@ -781,8 +811,23 @@ function TreeChildren({
   fetchL1Progress,
 }) {
   const kids = childrenCache[parentId] || [];
-  const filteredKids = hasActiveSearch ? kids.filter((u) => isNodeOrDescendantMatch(u.id)) : kids;
+  const filteredKids = hasActiveSearch
+    ? kids.filter((u) => isNodeOrDescendantMatch(u.id))
+    : kids;
   const manyRows = filteredKids.length > 60;
+
+  // Refs used for both modes
+  const parentRef = useRef(null);
+  const loadMoreRef = useRef(null);
+
+  // Always call the hook (unconditional)
+  const rowVirtualizer = useVirtualizer({
+    count: manyRows ? filteredKids.length : 0,
+    getScrollElement: () => parentRef.current,
+    estimateSize: () => 64,
+    overscan: 8,
+    measureElement: (el) => el.getBoundingClientRect().height,
+  });
 
   // Progress fetch for visible Level 1 items
   useEffect(() => {
@@ -805,11 +850,10 @@ function TreeChildren({
   }
 
   /** ===== Auto-load sentinel ===== */
-  const parentRef = useRef(null);
-  const loadMoreRef = useRef(null);
+  const hasMore = !!nodePages[parentId]?.hasMore;
   useEffect(() => {
-    if (!nodePages[parentId]?.hasMore) return;
-    const rootEl = manyRows ? parentRef.current : null; // for virtualized use container; otherwise viewport
+    if (!hasMore) return;
+    const rootEl = manyRows ? parentRef.current : null; // virtualized uses container; otherwise viewport
     const io = new IntersectionObserver(
       (entries) => {
         if (entries[0].isIntersecting) {
@@ -820,9 +864,9 @@ function TreeChildren({
     );
     if (loadMoreRef.current) io.observe(loadMoreRef.current);
     return () => io.disconnect();
-  }, [nodePages[parentId]?.hasMore, parentId, manyRows, fetchChildren]);
+  }, [hasMore, parentId, manyRows, fetchChildren]);
 
-  if (filteredKids.length === 0 && !(nodePages[parentId]?.hasMore)) {
+  if (filteredKids.length === 0 && !hasMore) {
     return (
       <div className="text-xs sm:text-sm text-gray-500 ml-1 sm:ml-2 py-1">
         (no members at level {level}) — share your link to grow this level
@@ -843,7 +887,12 @@ function TreeChildren({
             const badge = level === 1 ? l1Progress[u.id] : undefined;
 
             return (
-              <li key={u.id} className={`py-2 sm:py-2.5 ${idx % 2 === 0 ? "bg-white" : "bg-gray-50"}`}>
+              <li
+                key={u.id}
+                className={`py-2 sm:py-2.5 ${
+                  idx % 2 === 0 ? "bg-white" : "bg-gray-50"
+                }`}
+              >
                 <div className="flex items-start sm:items-center justify-between gap-2">
                   <div className="flex items-start sm:items-center gap-2 min-w-0">
                     {canDrill ? (
@@ -858,7 +907,11 @@ function TreeChildren({
                       <div className="h-7 w-7" />
                     )}
 
-                    <div className={`flex-1 min-w-0 rounded px-1 ${highlight ? "bg-yellow-50" : ""}`}>
+                    <div
+                      className={`flex-1 min-w-0 rounded px-1 ${
+                        highlight ? "bg-yellow-50" : ""
+                      }`}
+                    >
                       <div className="flex flex-wrap items-center gap-2">
                         <span className="inline-block rounded bg-gray-100 px-1.5 py-0.5 text-[10px] text-gray-700">
                           L{level}
@@ -870,7 +923,9 @@ function TreeChildren({
                         {/* L1 mini progress badge + champion */}
                         {badge !== undefined && (
                           <span
-                            className={`ml-1 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] border ${badgeStyle(badge)}`}
+                            className={`ml-1 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] border ${badgeStyle(
+                              badge
+                            )}`}
                             title="Their own Level 1 progress"
                           >
                             {badge >= 10 && <span aria-hidden>🏆</span>}
@@ -887,7 +942,9 @@ function TreeChildren({
                               <span className="font-mono">{u.phone}</span>
                               <a
                                 className="inline-flex items-center gap-1 rounded-full bg-emerald-50 text-emerald-700 px-2 py-0.5 border border-emerald-100 hover:bg-emerald-100"
-                                href={`https://wa.me/${phoneDigits}?text=${encodeURIComponent(`Hi ${u.name || ""},`)}`}
+                                href={`https://wa.me/${phoneDigits}?text=${encodeURIComponent(
+                                  `Hi ${u.name || ""},`
+                                )}`}
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 title="Message on WhatsApp"
@@ -897,7 +954,9 @@ function TreeChildren({
                             </>
                           )}
                           <span className="opacity-40 hidden sm:inline">•</span>
-                          <span className="font-mono text-blue-700 truncate">{u.referralId}</span>
+                          <span className="font-mono text-blue-700 truncate">
+                            {u.referralId}
+                          </span>
                         </div>
                       )}
                     </div>
@@ -928,31 +987,30 @@ function TreeChildren({
           })}
         </ul>
 
-        {nodePages[parentId]?.hasMore && (
-          <>
-            <div ref={loadMoreRef} className="h-8 w-full flex items-center justify-center text-xs text-gray-500">
-              Loading more…
-            </div>
-          </>
+        {hasMore && (
+          <div
+            ref={loadMoreRef}
+            className="h-8 w-full flex items-center justify-center text-xs text-gray-500"
+          >
+            Loading more…
+          </div>
         )}
       </div>
     );
   }
 
-  // Virtualized (large sets)
-  const rowVirtualizer = useVirtualizer({
-    count: filteredKids.length,
-    getScrollElement: () => parentRef.current,
-    estimateSize: () => 64,
-    overscan: 8,
-    measureElement: (el) => el.getBoundingClientRect().height,
-  });
-
-  // Virtualized list with sentinel inside scroll container
+  // Virtualized list (large sets)
   return (
     <div className="relative">
-      <div ref={parentRef} className="overflow-auto overflow-x-hidden" style={{ maxHeight: 560 }}>
-        <ul className="relative" style={{ height: rowVirtualizer.getTotalSize() }}>
+      <div
+        ref={parentRef}
+        className="overflow-auto overflow-x-hidden"
+        style={{ maxHeight: 560 }}
+      >
+        <ul
+          className="relative"
+          style={{ height: rowVirtualizer.getTotalSize() }}
+        >
           {rowVirtualizer.getVirtualItems().map((vi) => {
             const u = filteredKids[vi.index];
             const isOpen = expanded.has(u.id);
@@ -965,7 +1023,9 @@ function TreeChildren({
               <li
                 key={u.id}
                 ref={rowVirtualizer.measureElement}
-                className={`absolute left-0 right-0 ${vi.index % 2 === 0 ? "bg-white" : "bg-gray-50"}`}
+                className={`absolute left-0 right-0 ${
+                  vi.index % 2 === 0 ? "bg-white" : "bg-gray-50"
+                }`}
                 style={{ transform: `translateY(${vi.start}px)` }}
               >
                 <div className="py-2 sm:py-2.5 border-b border-gray-100">
@@ -983,7 +1043,11 @@ function TreeChildren({
                         <div className="h-7 w-7" />
                       )}
 
-                      <div className={`flex-1 min-w-0 rounded px-1 ${highlight ? "bg-yellow-50" : ""}`}>
+                      <div
+                        className={`flex-1 min-w-0 rounded px-1 ${
+                          highlight ? "bg-yellow-50" : ""
+                        }`}
+                      >
                         <div className="flex flex-wrap items-center gap-2">
                           <span className="inline-block rounded bg-gray-100 px-1.5 py-0.5 text-[10px] text-gray-700">
                             L{level}
@@ -994,7 +1058,9 @@ function TreeChildren({
 
                           {badge !== undefined && (
                             <span
-                              className={`ml-1 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] border ${badgeStyle(badge)}`}
+                              className={`ml-1 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] border ${badgeStyle(
+                                badge
+                              )}`}
                               title="Their own Level 1 progress"
                             >
                               {badge >= 10 && <span aria-hidden>🏆</span>}
@@ -1011,7 +1077,9 @@ function TreeChildren({
                                 <span className="font-mono">{u.phone}</span>
                                 <a
                                   className="inline-flex items-center gap-1 rounded-full bg-emerald-50 text-emerald-700 px-2 py-0.5 border border-emerald-100 hover:bg-emerald-100"
-                                  href={`https://wa.me/${phoneDigits}?text=${encodeURIComponent(`Hi ${u.name || ""},`)}`}
+                                  href={`https://wa.me/${phoneDigits}?text=${encodeURIComponent(
+                                    `Hi ${u.name || ""},`
+                                  )}`}
                                   target="_blank"
                                   rel="noopener noreferrer"
                                   title="Message on WhatsApp"
@@ -1021,7 +1089,9 @@ function TreeChildren({
                               </>
                             )}
                             <span className="opacity-40 hidden sm:inline">•</span>
-                            <span className="font-mono text-blue-700 truncate">{u.referralId}</span>
+                            <span className="font-mono text-blue-700 truncate">
+                              {u.referralId}
+                            </span>
                           </div>
                         )}
                       </div>
@@ -1053,11 +1123,13 @@ function TreeChildren({
           })}
 
           {/* Sentinel for virtualized container */}
-          {nodePages[parentId]?.hasMore && (
+          {hasMore && (
             <li
               ref={loadMoreRef}
               className="absolute left-0 right-0 h-10 flex items-center justify-center text-xs text-gray-500"
-              style={{ transform: `translateY(${rowVirtualizer.getTotalSize() - 40}px)` }}
+              style={{
+                transform: `translateY(${rowVirtualizer.getTotalSize() - 40}px)`,
+              }}
             >
               Loading more…
             </li>
@@ -1066,12 +1138,4 @@ function TreeChildren({
       </div>
     </div>
   );
-
-  function badgeStyle(n) {
-    if (n === undefined) return "bg-gray-50 text-gray-500 border-gray-200";
-    if (n >= 10) return "bg-green-50 text-green-700 border-green-200";
-    if (n >= 8) return "bg-blue-50 text-blue-700 border-blue-200";
-    if (n >= 4) return "bg-amber-50 text-amber-700 border-amber-200";
-    return "bg-red-50 text-red-700 border-red-200";
-  }
 }
