@@ -16,10 +16,10 @@ import {
   startAfter,
 } from "firebase/firestore";
 import { useVirtualizer } from "@tanstack/react-virtual";
+import { QRCodeCanvas } from "qrcode.react";
 
 const MAX_DEPTH = 6;
 const PAGE_SIZE = 50;
-const DISABLE_EXPAND_ALL_THRESHOLD = 2000;
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -58,6 +58,22 @@ export default function DashboardPage() {
 
   // Clipboard
   const [copySuccess, setCopySuccess] = useState("");
+
+  // Header dropdown
+  const [menuOpen, setMenuOpen] = useState(false);
+
+  // Responsive QR size
+  const [qrSize, setQrSize] = useState(120);
+  useEffect(() => {
+    const compute = () => {
+      const w = typeof window !== "undefined" ? window.innerWidth : 1024;
+      const s = w < 380 ? 100 : w < 640 ? 120 : 140;
+      setQrSize(s);
+    };
+    compute();
+    window.addEventListener("resize", compute);
+    return () => window.removeEventListener("resize", compute);
+  }, []);
 
   // ===== Init =====
   useEffect(() => {
@@ -125,6 +141,12 @@ export default function DashboardPage() {
       digits.length === 10 ? `91${digits}` : digits.startsWith("0") ? digits.slice(1) : digits;
     const msg = encodeURIComponent(`Hi ${name || ""},`);
     return `https://wa.me/${withCc}?text=${msg}`;
+  }
+
+  function referralLink() {
+    if (!userData?.referralId && typeof window === "undefined") return "";
+    const origin = typeof window !== "undefined" ? window.location.origin : "";
+    return `${origin}/register?ref=${userData?.referralId || ""}`;
   }
 
   // ===== Per-node children (paginated) =====
@@ -304,7 +326,7 @@ export default function DashboardPage() {
   // Clipboard + logout
   function handleCopy() {
     if (userData?.referralId) {
-      const link = `${window.location.origin}/register?ref=${userData.referralId}`;
+      const link = referralLink();
       navigator.clipboard.writeText(link).then(() => {
         setCopySuccess("Referral link copied!");
         setTimeout(() => setCopySuccess(""), 2000);
@@ -314,6 +336,14 @@ export default function DashboardPage() {
   async function handleLogout() {
     await signOut(auth);
     router.push("/login");
+  }
+
+  // Greeting
+  function greeting() {
+    const h = new Date().getHours();
+    if (h < 12) return "Good Morning";
+    if (h < 18) return "Good Afternoon";
+    return "Good Evening";
   }
 
   if (loading) {
@@ -326,14 +356,40 @@ export default function DashboardPage() {
 
   return (
     <div className="min-h-screen bg-white">
-      <div className="mx-auto max-w-4xl px-4 py-6 sm:py-10">
-        {/* Header */}
-        <header className="mb-6 sm:mb-8">
-          <h1 className="text-2xl sm:text-3xl font-semibold tracking-tight text-gray-900 text-center">
-            Dashboard
+      {/* Header (non-sticky) */}
+      <header className="bg-blue-600 text-white shadow-sm">
+        <div className="mx-auto max-w-4xl px-4 py-3 flex items-center justify-between">
+          <h1 className="text-lg sm:text-xl font-semibold tracking-tight">
+            Team Dashboard
           </h1>
-        </header>
+          <div className="relative">
+            <button
+              onClick={() => setMenuOpen((v) => !v)}
+              className="rounded-md bg-blue-500/70 px-3 py-1.5 text-sm font-medium hover:bg-blue-500 focus:outline-none"
+              aria-haspopup="menu"
+              aria-expanded={menuOpen ? "true" : "false"}
+            >
+              Menu ▾
+            </button>
+            {menuOpen && (
+              <div
+                className="absolute right-0 mt-2 w-40 rounded-md bg-white text-gray-800 shadow-lg ring-1 ring-black/5 overflow-hidden"
+                role="menu"
+              >
+                <button
+                  onClick={handleLogout}
+                  className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50"
+                  role="menuitem"
+                >
+                  Logout
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      </header>
 
+      <div className="mx-auto max-w-4xl px-4 py-6 sm:py-8">
         {/* Identity */}
         <section className="rounded-2xl border border-gray-100 bg-white/80 shadow-sm p-4 sm:p-6">
           {dashError && (
@@ -342,15 +398,12 @@ export default function DashboardPage() {
             </div>
           )}
 
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex flex-col-reverse gap-4 sm:flex-row sm:items-center sm:justify-between">
+            {/* Left: greeting & IDs */}
             <div className="space-y-1">
               <div className="text-base sm:text-lg font-medium text-gray-900">
-                {userData?.name}
-              </div>
-              <div className="text-sm text-gray-600">
-                <a className="hover:underline" href={`mailto:${userData?.email}`}>
-                  {userData?.email}
-                </a>
+                <span className="text-gray-700">{greeting()}, </span>
+                <span className="font-bold">{userData?.name}</span>
               </div>
               <div className="text-sm text-gray-600">
                 Referral ID:{" "}
@@ -364,34 +417,36 @@ export default function DashboardPage() {
               )}
             </div>
 
-            <div className="flex gap-2">
-              <button
-                onClick={handleCopy}
-                className="rounded-xl bg-blue-600 text-white px-3 py-2 text-sm hover:bg-blue-700 active:scale-[0.99] transition"
-              >
-                Copy Referral Link
-              </button>
-              {copySuccess && (
-                <span className="self-center text-xs text-green-600">{copySuccess}</span>
-              )}
-              <button
-                onClick={handleLogout}
-                className="rounded-xl border border-gray-200 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 active:scale-[0.99] transition"
-              >
-                Logout
-              </button>
+            {/* Right: QR + integrated copy button (mobile friendly) */}
+            <div className="self-end sm:self-auto">
+              <div className="rounded-2xl border border-gray-200 bg-white shadow-sm p-2 flex flex-col items-center">
+                <div className="rounded-xl overflow-hidden shadow-sm">
+                  <QRCodeCanvas value={referralLink()} size={qrSize} level="M" includeMargin={false} />
+                </div>
+                <button
+                  onClick={handleCopy}
+                  className="mt-2 w-full rounded-xl bg-blue-600 text-white px-3 py-2 text-sm hover:bg-blue-700 active:scale-[0.99] transition"
+                >
+                  Copy Referral Link
+                </button>
+                {copySuccess && (
+                  <span className="mt-1 text-[11px] text-green-600">{copySuccess}</span>
+                )}
+              </div>
             </div>
           </div>
         </section>
 
-        {/* Stats — Option A: Total card + horizontal chips */}
+        {/* Stats — fully centered */}
         <section className="mt-6">
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
-            <StatCard label="Total Downlines" value={counts.total} tone="green" />
+          <div className="flex justify-center">
+            <div className="w-full sm:w-auto grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
+              <StatCard label="Total Downlines" value={counts.total} tone="green" />
+            </div>
           </div>
 
           <div className="mt-3 -mx-1 overflow-x-auto">
-            <div className="flex gap-2 px-1 pb-1">
+            <div className="flex justify-center gap-2 px-1 pb-1">
               {[1, 2, 3, 4, 5].map((l) => (
                 <span
                   key={l}
@@ -413,15 +468,15 @@ export default function DashboardPage() {
           </div>
         </section>
 
-        {/* Tree */}
-        <section className="mt-8 rounded-2xl border border-gray-100 bg-white/80 shadow-sm p-4 sm:p-6 overflow-x-auto">
+        {/* Team / Tree (minimal indentation + shaded rows) */}
+        <section className="mt-8 rounded-2xl border border-gray-100 bg-white/80 shadow-sm p-4 sm:p-6">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
             <div>
               <h2 className="text-lg sm:text-xl font-semibold text-gray-900">
                 Your Team
               </h2>
               <p className="text-xs text-gray-500 mt-1">
-                Expand up to 6 levels. Search by name / email / ID.
+                Minimal indent for drill down. Search by name / email / ID.
               </p>
             </div>
             <div className="flex gap-2">
@@ -449,8 +504,6 @@ export default function DashboardPage() {
                 <option value={5}>Expand to Level 5</option>
                 <option value={6}>Expand to Level 6 (All)</option>
               </select>
-              {/* Removed Refresh button */}
-              {/* Removed Expand All button */}
             </div>
           </div>
 
@@ -466,7 +519,7 @@ export default function DashboardPage() {
               <button
                 onClick={() => toggleNode(currentUid, 1)}
                 disabled={treeLoading}
-                className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100 active:scale-[0.98] transition"
+                className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100 active:scale-[0.98] transition"
                 title={expanded.has(currentUid) ? "Collapse" : "Expand"}
               >
                 {expanded.has(currentUid) ? "−" : "+"}
@@ -479,17 +532,13 @@ export default function DashboardPage() {
                   {userData?.name || "You"}
                 </div>
                 <div className="text-xs text-gray-500 truncate">
-                  <a className="hover:underline" href={`mailto:${userData?.email}`}>
-                    {userData?.email}
-                  </a>
-                  <span className="mx-2">•</span>
                   <span className="font-mono text-blue-700">{userData?.referralId}</span>
                 </div>
               </div>
             </div>
 
             {expanded.has(currentUid) && (
-              <div className="ml-5 sm:ml-6 border-l border-gray-100 pl-3 sm:pl-4">
+              <div className="ml-3 sm:ml-4 border-l border-gray-100 pl-2 sm:pl-3">
                 <TreeChildren parentId={currentUid} level={1} />
               </div>
             )}
@@ -515,7 +564,7 @@ export default function DashboardPage() {
     );
   }
 
-  // --- TreeChildren with UNCONDITIONAL hooks + self-measured virtualization ---
+  // --- TreeChildren with minimal indentation + shaded rows, no createdAt on right ---
   function TreeChildren({ parentId, level }) {
     const kids = childrenCache[parentId] || [];
     const filteredKids = hasActiveSearch
@@ -524,7 +573,7 @@ export default function DashboardPage() {
 
     const manyRows = filteredKids.length > 60; // threshold for virtualization
 
-    // ✅ Hooks are declared at the top, unconditionally (no early returns before this)
+    // Hooks
     const parentRef = useRef(null);
     const rowVirtualizer = useVirtualizer({
       count: filteredKids.length,
@@ -534,10 +583,10 @@ export default function DashboardPage() {
       measureElement: (el) => el.getBoundingClientRect().height,
     });
 
-    // Empty state AFTER hooks
+    // Empty
     if (filteredKids.length === 0 && !(nodePages[parentId]?.hasMore)) {
       return (
-        <div className="text-xs sm:text-sm text-gray-500 ml-3 sm:ml-4 py-1">
+        <div className="text-xs sm:text-sm text-gray-500 ml-1 sm:ml-2 py-1">
           (no members at level {level})
         </div>
       );
@@ -548,14 +597,14 @@ export default function DashboardPage() {
       return (
         <div className="relative">
           <ul className="divide-y divide-gray-100">
-            {filteredKids.map((u) => {
+            {filteredKids.map((u, idx) => {
               const isOpen = expanded.has(u.id);
               const canDrill = level < MAX_DEPTH;
               const highlight = hasActiveSearch && nodeMatches(u);
               const phoneClean = String(u.phone || "").trim();
 
               return (
-                <li key={u.id} className="py-2 sm:py-2.5">
+                <li key={u.id} className={`py-2 sm:py-2.5 ${idx % 2 === 0 ? "bg-white" : "bg-gray-50"}`}>
                   <div className="flex items-start sm:items-center justify-between gap-2">
                     <div className="flex items-start sm:items-center gap-2 min-w-0">
                       {canDrill ? (
@@ -570,7 +619,7 @@ export default function DashboardPage() {
                         <div className="h-7 w-7" />
                       )}
 
-                      <div className={`flex-1 min-w-0 rounded-lg px-1 ${highlight ? "bg-yellow-50" : ""}`}>
+                      <div className={`flex-1 min-w-0 rounded px-1 ${highlight ? "bg-yellow-50" : ""}`}>
                         <div className="flex flex-wrap items-center gap-2">
                           <span className="inline-block rounded bg-gray-100 px-1.5 py-0.5 text-[10px] text-gray-700">
                             L{level}
@@ -581,12 +630,7 @@ export default function DashboardPage() {
                         </div>
 
                         <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-gray-600">
-                          {u.email && (
-                            <a className="hover:underline truncate" href={`mailto:${u.email}`}>
-                              {u.email}
-                            </a>
-                          )}
-                          {u.email && phoneClean && <span className="opacity-40">•</span>}
+                          {/* email removed by request */}
                           {phoneClean && (
                             <a
                               className="inline-flex items-center gap-1 rounded-full bg-emerald-50 text-emerald-700 px-2 py-0.5 border border-emerald-100 hover:bg-emerald-100"
@@ -604,13 +648,11 @@ export default function DashboardPage() {
                       </div>
                     </div>
 
-                    <div className="text-[11px] sm:text-xs text-gray-500 shrink-0">
-                      {u.createdAt ? u.createdAt.toISOString().slice(0, 10) : ""}
-                    </div>
+                    {/* createdAt removed */}
                   </div>
 
                   {isOpen && canDrill && (
-                    <div className="mt-2 ml-4 sm:ml-6 border-l border-gray-100 pl-3 sm:pl-4">
+                    <div className="mt-2 ml-3 sm:ml-4 border-l border-gray-100 pl-2 sm:pl-3">
                       <TreeChildren parentId={u.id} level={level + 1} />
                     </div>
                   )}
@@ -633,7 +675,7 @@ export default function DashboardPage() {
       );
     }
 
-    // Virtualized list for large sibling sets
+    // Virtualized (large sets)
     return (
       <div className="relative">
         <div
@@ -653,7 +695,7 @@ export default function DashboardPage() {
                 <li
                   key={u.id}
                   ref={rowVirtualizer.measureElement}
-                  className="absolute left-0 right-0"
+                  className={`absolute left-0 right-0 ${vi.index % 2 === 0 ? "bg-white" : "bg-gray-50"}`}
                   style={{ transform: `translateY(${vi.start}px)` }}
                 >
                   <div className="py-2 sm:py-2.5 border-b border-gray-100">
@@ -671,7 +713,7 @@ export default function DashboardPage() {
                           <div className="h-7 w-7" />
                         )}
 
-                        <div className={`flex-1 min-w-0 rounded-lg px-1 ${highlight ? "bg-yellow-50" : ""}`}>
+                        <div className={`flex-1 min-w-0 rounded px-1 ${highlight ? "bg-yellow-50" : ""}`}>
                           <div className="flex flex-wrap items-center gap-2">
                             <span className="inline-block rounded bg-gray-100 px-1.5 py-0.5 text-[10px] text-gray-700">
                               L{level}
@@ -682,12 +724,7 @@ export default function DashboardPage() {
                           </div>
 
                           <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-gray-600">
-                            {u.email && (
-                              <a className="hover:underline truncate" href={`mailto:${u.email}`}>
-                                {u.email}
-                              </a>
-                            )}
-                            {u.email && phoneClean && <span className="opacity-40">•</span>}
+                            {/* email removed */}
                             {phoneClean && (
                               <a
                                 className="inline-flex items-center gap-1 rounded-full bg-emerald-50 text-emerald-700 px-2 py-0.5 border border-emerald-100 hover:bg-emerald-100"
@@ -705,13 +742,11 @@ export default function DashboardPage() {
                         </div>
                       </div>
 
-                      <div className="text-[11px] sm:text-xs text-gray-500 shrink-0">
-                        {u.createdAt ? u.createdAt.toISOString().slice(0, 10) : ""}
-                      </div>
+                      {/* createdAt removed */}
                     </div>
 
                     {isOpen && canDrill && (
-                      <div className="mt-2 ml-4 sm:ml-6 border-l border-gray-100 pl-3 sm:pl-4">
+                      <div className="mt-2 ml-3 sm:ml-4 border-l border-gray-100 pl-2 sm:pl-3">
                         <TreeChildren parentId={u.id} level={level + 1} />
                       </div>
                     )}
