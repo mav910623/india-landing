@@ -19,7 +19,7 @@ import {
 import { useVirtualizer } from "@tanstack/react-virtual";
 import QRCode from "qrcode";
 
-/** ===== Constants (tune here if needed) ===== */
+/** ===== Constants ===== */
 const MAX_DEPTH = 6;
 const PAGE_SIZE = 50;
 const L1_GOAL = 10;
@@ -47,20 +47,19 @@ export default function DashboardPage() {
   });
 
   /** ===== Tree data & expansion ===== */
-  const [childrenCache, setChildrenCache] = useState({}); // parentUid -> children[]
-  const [parentOf, setParentOf] = useState({});            // childUid -> parentUid
-  const [expanded, setExpanded] = useState(new Set());     // expanded node IDs
-  const [nodePages, setNodePages] = useState({});          // parentUid -> { items, cursor, hasMore }
+  const [childrenCache, setChildrenCache] = useState({});
+  const [parentOf, setParentOf] = useState({});
+  const [expanded, setExpanded] = useState(new Set());
+  const [nodePages, setNodePages] = useState({}); // parentUid -> { items, cursor, hasMore }
 
   /** ===== L1 progress cache (x/10) ===== */
-  const [l1Progress, setL1Progress] = useState({});        // userUid -> number (0..10)
+  const [l1Progress, setL1Progress] = useState({});
 
   /** ===== Clipboard / QR ===== */
   const [copySuccess, setCopySuccess] = useState("");
   const [qrDataUrl, setQrDataUrl] = useState("");
   const [qrSize, setQrSize] = useState(120);
   const qrBoxRef = useRef(null);
-  const iconPx = Math.min(28, Math.max(18, Math.floor(qrSize * 0.18)));
 
   /** ===== Help sheet ===== */
   const [showHelp, setShowHelp] = useState(false);
@@ -96,7 +95,7 @@ export default function DashboardPage() {
         setCurrentUid(cu.uid);
         await loadUser(cu.uid);
         await refreshCounts();
-        await expandToLevel(1); // open L1 on load (simple mental model)
+        await expandToLevel(1); // open L1 on load
       }
     });
     return () => unsub();
@@ -326,7 +325,7 @@ export default function DashboardPage() {
       </header>
 
       <main className="mx-auto max-w-4xl px-4 py-6 sm:py-8">
-        {/* ===== Hero: single CTA + QR ===== */}
+        {/* ===== Hero: guidance + QR (no share buttons here) ===== */}
         <section className="rounded-2xl border border-gray-100 bg-white shadow-sm p-4 sm:p-6">
           <div className="flex items-center justify-between gap-3">
             <div className="min-w-0">
@@ -335,34 +334,11 @@ export default function DashboardPage() {
                 {userData?.name || "India Founder"}
               </h2>
 
+              {/* New guidance copy */}
               <p className="mt-2 text-sm text-gray-700">
-                Ready to be an India Founder? Register using this link and start building team India.
+                Start building your network now. Complete <strong>Mission 1</strong> by sponsoring your first
+                <strong> 10 India Founders</strong>; then unlock <strong>Mission 2</strong> to grow leaders in your team.
               </p>
-
-              <div className="mt-3 flex flex-wrap items-center gap-2">
-                <button
-                  onClick={handleCopy}
-                  className="rounded-xl bg-blue-600 text-white px-3 py-2 text-sm font-medium hover:bg-blue-700 active:scale-[0.98]"
-                  title="Copy your referral link"
-                >
-                  Copy Invite Link
-                </button>
-                <a
-                  href={`https://wa.me/?text=${encodeURIComponent(
-                    "Ready to be an India Founder? Register using this link and start building team India\n\n" +
-                      referralLink()
-                  )}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700 hover:bg-emerald-100"
-                  title="Share on WhatsApp"
-                >
-                  Share on WhatsApp
-                </a>
-                {copySuccess && (
-                  <span className="text-[11px] text-green-600">{copySuccess}</span>
-                )}
-              </div>
 
               {dashError && (
                 <div className="mt-3 rounded-xl bg-amber-50 px-4 py-3 text-sm text-amber-800 border border-amber-200">
@@ -371,7 +347,7 @@ export default function DashboardPage() {
               )}
             </div>
 
-            {/* QR (auto-size) */}
+            {/* QR (no icon buttons below; sharing lives in sticky bar) */}
             <div className="shrink-0" id="qrShareBlock">
               <div
                 ref={qrBoxRef}
@@ -391,68 +367,42 @@ export default function DashboardPage() {
                     style={{ width: qrSize, height: qrSize }}
                   />
                 </div>
-                <div className="mt-2 grid grid-cols-2 gap-2 w-full">
-                  <button
-                    onClick={handleCopy}
-                    aria-label="Copy referral link"
-                    className="rounded-xl bg-blue-600 hover:bg-blue-700 transition flex items-center justify-center"
-                    title="Copy referral link"
-                    style={{ height: Math.max(36, Math.floor(qrSize * 0.28)) }}
-                  >
-                    <svg xmlns="http://www.w3.org/2000/svg" width={iconPx} height={iconPx} viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
-                  </button>
-                  <a
-                    href={`https://wa.me/?text=${encodeURIComponent(
-                      "Ready to be an India Founder? Register using this link and start building team India\n\n" +
-                        referralLink()
-                    )}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    aria-label="Share on WhatsApp"
-                    className="rounded-xl border border-emerald-200 bg-emerald-50 hover:bg-emerald-100 transition flex items-center justify-center"
-                    title="Share on WhatsApp"
-                    style={{ height: Math.max(36, Math.floor(qrSize * 0.28)) }}
-                  >
-                    <svg xmlns="http://www.w3.org/2000/svg" width={iconPx} height={iconPx} viewBox="0 0 24 24" fill="currentColor" className="text-emerald-700"><path d="M20.52 3.48A11.94 11.94 0 0 0 12.01 0C5.39 0 .04 5.35.04 11.96c0 2.11.55 4.16 1.6 5.99L0 24l6.2-1.62a11.95 11.95 0 0 0 5.81 1.49h.01c6.61 0 11.96-5.35 11.96-11.96 0-3.2-1.25-6.21-3.46-8.42ZM12.02 21.3h-.01a9.29 9.29 0 0 1-4.74-1.3l-.34-.2-3.68.96.98-3.58-.22-.37a9.27 9.27 0 0 1-1.42-4.9c0-5.12 4.17-9.29 9.3-9.29 2.48 0 4.81.96 6.57 2.72a9.25 9.25 0 0 1 2.72 6.57c0 5.13-4.17 9.29-9.3 9.29Zm5.35-6.94c-.29-.15-1.7-.84-1.96-.94-.26-.1-.45-.15-.64.15-.19.29-.74.94-.91 1.13-.17.19-.34.21-.63.07-.29-.15-1.22-.45-2.32-1.43-.86-.77-1.44-1.73-1.61-2.02-.17-.29-.02-.45.13-.6.14-.14.29-.37.43-.56.14-.19.19-.32.29-.53.1-.21.05-.39-.02-.54-.07-.15-.64-1.55-.88-2.12-.23-.56-.47-.49-.64-.5h-.55c-.19 0-.5.07-.76.37-.26.29-1 1-1 2.42s1.03 2.81 1.18 3.01c.15.19 2.03 3.09 4.91 4.34.69.3 1.23.48 1.65.61.69.22 1.31.19 1.8.12.55-.08 1.7-.7 1.94-1.37.24-.67.24-1.24.17-1.36-.07-.12-.26-.19-.55-.34Z" /></svg>
-                  </a>
-                </div>
               </div>
             </div>
           </div>
 
-          {/* Single chip: Total team */}
-          <div className="mt-4">
-            <Chip label="Total team" value={counts.total} tone="green" />
+          {/* Mini-card: Total team size */}
+          <div className="mt-4 grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <MiniStatCard label="Total team size" value={counts.total} />
           </div>
         </section>
 
-        {/* ===== Missions (clear, compact) ===== */}
+        {/* ===== Missions (no buttons; bigger, colored rings; ring left, text right) ===== */}
         <section className="mt-6">
           <div className="grid gap-3 sm:grid-cols-2">
-            <MissionCard
+            <MissionWide
               title="Mission 1: Sponsor 10 India Founders"
-              subtitle="Work on sponsoring your first 10 India Founders"
+              subtitle="Invite Founders to your Level 1 and reach 10/10 to unlock Team Growth."
               progress={`${counts.levels?.["1"] || 0}/10`}
               pct={goalPct}
-              done={goalDone}
-              locked={false}
-              ctaLabel="Copy Link"
-              onCta={handleCopy}
+              color={goalPct >= 100 ? "green" : goalPct >= 60 ? "blue" : goalPct > 0 ? "amber" : "gray"}
             />
 
             {goalDone && (
-              <MissionCard
+              <MissionWide
                 title="Mission 2: Team Growth"
-                subtitle="Help 3 of your founders to sponsor 10"
+                subtitle="Help 3 of your Level 1 each sponsor their 10. Build leaders, not just numbers."
                 progress={`${Math.min(HELP_TARGET, completedL1)}/3`}
                 pct={Math.min(100, Math.round((completedL1 / HELP_TARGET) * 100))}
-                done={completedL1 >= HELP_TARGET}
-                locked={false}
-                ctaLabel="View Level 1"
-                onCta={async () => {
-                  await expandToLevel(1);
-                  document.getElementById("teamSection")?.scrollIntoView({ behavior: "smooth" });
-                }}
+                color={
+                  completedL1 >= HELP_TARGET
+                    ? "green"
+                    : completedL1 >= 2
+                    ? "blue"
+                    : completedL1 >= 1
+                    ? "amber"
+                    : "gray"
+                }
               />
             )}
           </div>
@@ -520,15 +470,15 @@ export default function DashboardPage() {
         </section>
       </main>
 
-      {/* Sticky bottom action bar */}
+      {/* Sticky bottom action bar — only two buttons with exact labels requested */}
       <div className="fixed bottom-0 inset-x-0 z-40 border-t border-gray-200 bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/80">
-        <div className="mx-auto max-w-4xl px-4 py-2.5 grid grid-cols-3 gap-2">
+        <div className="mx-auto max-w-4xl px-4 py-2.5 grid grid-cols-2 gap-2">
           <button
             onClick={handleCopy}
             className="rounded-xl bg-blue-600 text-white px-3 py-2 text-sm font-medium hover:bg-blue-700"
             title="Copy your referral link"
           >
-            Copy Link
+            Copy Invite Link
           </button>
           <a
             href={`https://wa.me/?text=${encodeURIComponent(
@@ -540,19 +490,7 @@ export default function DashboardPage() {
             className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700 hover:bg-emerald-100 text-center font-medium"
             title="Share on WhatsApp"
           >
-            WhatsApp
-          </a>
-          <a
-            href="#teamSection"
-            onClick={async (e) => {
-              e.preventDefault();
-              await expandToLevel(1);
-              document.getElementById("teamSection")?.scrollIntoView({ behavior: "smooth" });
-            }}
-            className="rounded-xl border border-gray-200 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 text-center font-medium"
-            title="Open your team"
-          >
-            Open Team
+            Share on Whatsapp
           </a>
         </div>
       </div>
@@ -577,7 +515,7 @@ export default function DashboardPage() {
                 </button>
               </div>
               <ol className="mt-3 list-decimal pl-5 space-y-2 text-sm text-gray-700">
-                <li>Copy your link or show your QR to invite India Founders.</li>
+                <li>Use the bottom bar to copy your link or share on WhatsApp.</li>
                 <li>Registrations show in your <strong>Level 1</strong>.</li>
                 <li>Finish <strong>Mission 1 (10/10)</strong>, then help <strong>3</strong> Level 1 reach <strong>10/10</strong>.</li>
                 <li>Tap <strong>+</strong> to drill into deeper levels; open a row to see phone & WhatsApp.</li>
@@ -589,62 +527,84 @@ export default function DashboardPage() {
     </div>
   );
 
-  /** ===== (local) utility for search highlight — kept minimal if needed later ===== */
+  // simple predicate (kept for future search reuse)
   function nodeMatches(u) {
-    // (kept simple; we removed the visible search for declutter)
     const hay = `${normalize(u.name)} ${normalize(u.email)} ${normalize(u.referralId)}`;
     return !!hay;
   }
 }
 
 /** ===== Small UI bits ===== */
-function Chip({ label, value, tone }) {
-  const tones = {
-    green: "border-green-200 bg-green-50 text-green-700",
-    blue: "border-blue-200 bg-blue-50 text-blue-700",
-    purple: "border-purple-200 bg-purple-50 text-purple-700",
-  };
+
+function MiniStatCard({ label, value }) {
   return (
-    <span className={`inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-semibold ${tones[tone] || "border-gray-200 bg-gray-50 text-gray-700"}`}>
-      {label}
-      <span className="rounded-full bg-white/70 px-2 py-0.5 text-[11px] font-bold shadow-sm border border-white/60">
-        {value}
-      </span>
-    </span>
+    <div className="rounded-2xl border border-gray-100 bg-white shadow-sm p-4">
+      <div className="text-[11px] font-medium text-gray-500">{label}</div>
+      <div className="mt-1 text-2xl font-bold text-gray-900">{value}</div>
+    </div>
   );
 }
 
-function MissionCard({ title, subtitle, progress, pct, done, locked, ctaLabel, onCta }) {
-  const R = 34;
-  const C = 2 * Math.PI * R;
+// Big, colored mission ring with text to the right
+function MissionWide({ title, subtitle, progress, pct, color = "blue" }) {
+  // ring size
+  const R = 48;                 // radius
+  const C = 2 * Math.PI * R;    // circumference
   const off = C * (1 - (pct || 0) / 100);
 
+  const colors = {
+    green: { ring: "text-green-500", text: "text-green-700" },
+    blue: { ring: "text-blue-500", text: "text-blue-700" },
+    amber: { ring: "text-amber-500", text: "text-amber-700" },
+    gray: { ring: "text-gray-300", text: "text-gray-600" },
+  };
+  const cl = colors[color] || colors.blue;
+
   return (
-    <div className={`rounded-2xl border border-gray-100 bg-white p-4 shadow-sm ${locked ? "opacity-60" : ""}`}>
-      <h4 className="text-sm font-semibold text-gray-900">{title}</h4>
-      {subtitle && <p className="text-xs text-gray-600 mt-0.5">{subtitle}</p>}
-      <div className="mt-3 flex items-center gap-4">
-        <div className="relative w-20 h-20" title={`${pct || 0}%`}>
-          <svg className="w-20 h-20">
-            <circle className="text-gray-200" strokeWidth="6" stroke="currentColor" fill="transparent" r={R} cx="40" cy="40" />
-            <circle className={done ? "text-green-500" : "text-blue-500"} strokeWidth="6" strokeLinecap="round" stroke="currentColor" fill="transparent" r={R} cx="40" cy="40" strokeDasharray={C} strokeDashoffset={off} />
+    <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm">
+      <div className="flex items-center gap-4">
+        {/* Left: big ring */}
+        <div className="relative w-[112px] h-[112px]" title={`${pct || 0}%`}>
+          <svg className="w-[112px] h-[112px]">
+            <circle
+              className="text-gray-200"
+              strokeWidth="8"
+              stroke="currentColor"
+              fill="transparent"
+              r={R}
+              cx="56"
+              cy="56"
+            />
+            <circle
+              className={cl.ring}
+              strokeWidth="8"
+              strokeLinecap="round"
+              stroke="currentColor"
+              fill="transparent"
+              r={R}
+              cx="56"
+              cy="56"
+              strokeDasharray={C}
+              strokeDashoffset={off}
+            />
           </svg>
-          <div className="absolute inset-0 flex items-center justify-center text-xs font-bold">{progress}</div>
+          <div className={`absolute inset-0 flex items-center justify-center text-sm font-extrabold ${cl.text}`}>
+            {progress}
+          </div>
         </div>
-        <button
-          onClick={onCta}
-          disabled={locked}
-          className="flex-1 rounded-xl bg-blue-600 text-white px-3 py-2 text-sm font-medium hover:bg-blue-700 disabled:bg-gray-300"
-          title={locked ? "Unlock by completing previous mission" : "Go"}
-        >
-          {locked ? "Locked" : ctaLabel}
-        </button>
+
+        {/* Right: title + copy */}
+        <div className="min-w-0">
+          <h4 className="text-sm font-semibold text-gray-900">{title}</h4>
+          {subtitle && <p className="mt-1 text-xs text-gray-600">{subtitle}</p>}
+          {/* No CTA button here by design */}
+        </div>
       </div>
     </div>
   );
 }
 
-/** ===== Tree: minimal, mobile-first, colored progress badges & 🏆, phone on expand ===== */
+/** ===== Team tree ===== */
 function TreeChildren({
   parentId,
   level,
@@ -682,7 +642,7 @@ function TreeChildren({
 
   const hasMore = !!nodePages[parentId]?.hasMore;
 
-  // Auto-load more (no button clutter)
+  // Auto-load more
   useEffect(() => {
     if (!hasMore) return;
     const rootEl = manyRows ? parentRef.current : null;
@@ -925,5 +885,4 @@ function TreeChildren({
       </div>
     </div>
   );
-
 }
