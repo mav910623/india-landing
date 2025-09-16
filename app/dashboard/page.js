@@ -926,11 +926,4 @@ function TreeChildren({
     </div>
   );
 
-  function badgeStyle(n) {
-    if (n === undefined) return "bg-gray-50 text-gray-500 border-gray-200";
-    if (n >= 10) return "bg-green-50 text-green-700 border-green-200";
-    if (n >= 8) return "bg-blue-50 text-blue-700 border-blue-200";
-    if (n >= 4) return "bg-amber-50 text-amber-700 border-amber-200";
-    return "bg-red-50 text-red-700 border-red-200";
-  }
 }
