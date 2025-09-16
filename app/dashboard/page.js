@@ -47,7 +47,6 @@ export default function DashboardPage() {
   const [parentOf, setParentOf] = useState({});
   const [expanded, setExpanded] = useState(new Set());
   const [expandLevel, setExpandLevel] = useState(1);
-
   const [nodePages, setNodePages] = useState({});
 
   // Search
@@ -61,22 +60,35 @@ export default function DashboardPage() {
   // Header dropdown
   const [menuOpen, setMenuOpen] = useState(false);
 
-  // Responsive QR
-  const [qrSize, setQrSize] = useState(120);
+  // QR: data URL and responsive sizing via ResizeObserver
   const [qrDataUrl, setQrDataUrl] = useState("");
+  const [qrSize, setQrSize] = useState(120);
+  const qrBoxRef = useRef(null);
 
+  // Observe the QR container width and derive a size (clamped)
   useEffect(() => {
-    const compute = () => {
-      const w = typeof window !== "undefined" ? window.innerWidth : 1024;
-      const s = w < 380 ? 100 : w < 640 ? 120 : 140;
+    if (typeof window === "undefined") return;
+    const el = qrBoxRef.current;
+    if (!el || !("ResizeObserver" in window)) {
+      // Fallback: compute from window width
+      const w = window.innerWidth || 1024;
+      const s = w < 380 ? 96 : w < 640 ? 120 : 160;
       setQrSize(s);
-    };
-    compute();
-    window.addEventListener("resize", compute);
-    return () => window.removeEventListener("resize", compute);
+      return;
+    }
+    const ro = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        const cw = entry.contentRect.width || 140;
+        // leave a little padding; clamp to sane bounds for sharpness
+        const s = Math.max(96, Math.min(200, Math.floor(cw - 12)));
+        setQrSize(s);
+      }
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
   }, []);
 
-  // ===== Init =====
+  // Init
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (currentUser) => {
       if (!currentUser) {
@@ -148,7 +160,7 @@ export default function DashboardPage() {
     return `${origin}/register?ref=${userData?.referralId || ""}`;
   }
 
-  // Generate QR
+  // Generate QR whenever size or link changes
   useEffect(() => {
     const link = referralLink();
     if (!link) return;
@@ -289,7 +301,7 @@ export default function DashboardPage() {
         if (currentUid) toExpand.add(currentUid);
 
         for (const hit of payload.results || []) {
-          const path = hit.path || [];
+          const path = (hit.path || []);
           for (const pid of path) {
             await fetchChildren(pid);
             toExpand.add(pid);
@@ -339,6 +351,7 @@ export default function DashboardPage() {
       });
     }
   }
+
   async function handleLogout() {
     await signOut(auth);
     router.push("/login");
@@ -361,7 +374,7 @@ export default function DashboardPage() {
 
   return (
     <div className="min-h-screen bg-white">
-      {/* Header */}
+      {/* Header (non-sticky) */}
       <header className="bg-blue-600 text-white shadow-sm">
         <div className="mx-auto max-w-4xl px-4 py-3 flex items-center justify-between">
           <h1 className="text-lg sm:text-xl font-semibold tracking-tight">
@@ -391,7 +404,8 @@ export default function DashboardPage() {
       <div className="mx-auto max-w-4xl px-4 py-6 sm:py-8">
         {/* Identity */}
         <section className="rounded-2xl border border-gray-100 bg-white/80 shadow-sm p-4 sm:p-6">
-          <div className="flex flex-col-reverse gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            {/* Left: greeting & IDs */}
             <div className="space-y-1">
               <div className="text-base sm:text-lg font-medium text-gray-900">
                 <span className="text-gray-700">{greeting()}, </span>
@@ -408,8 +422,13 @@ export default function DashboardPage() {
                 </div>
               )}
             </div>
-            <div className="self-end sm:self-auto">
-              <div className="rounded-2xl border border-gray-200 bg-white shadow-sm p-2 flex flex-col items-center">
+
+            {/* Right: QR (stacks under info on small screens, responsive size) */}
+            <div className="self-start sm:self-auto w-full sm:w-auto">
+              <div
+                ref={qrBoxRef}
+                className="rounded-2xl border border-gray-200 bg-white shadow-sm p-3 flex flex-col items-center w-full sm:w-auto"
+              >
                 <div className="rounded-xl overflow-hidden shadow-sm">
                   <img
                     src={qrDataUrl || "data:image/gif;base64,R0lGODlhAQABAAAAACw="}
@@ -434,7 +453,7 @@ export default function DashboardPage() {
           </div>
         </section>
 
-        {/* Stats */}
+        {/* Stats — centered */}
         <section className="mt-6 text-center">
           <StatCard label="Total Downlines" value={counts.total} tone="green" />
           <div className="mt-3 -mx-1 overflow-x-auto">
@@ -458,7 +477,7 @@ export default function DashboardPage() {
           </div>
         </section>
 
-        {/* Tree */}
+        {/* Team / Tree (minimal indentation, shaded rows, no createdAt) */}
         <section className="mt-8 rounded-2xl border border-gray-100 bg-white/80 shadow-sm p-4 sm:p-6">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
             <div>
@@ -491,7 +510,7 @@ export default function DashboardPage() {
                 <option value={3}>Expand to Level 3</option>
                 <option value={4}>Expand to Level 4</option>
                 <option value={5}>Expand to Level 5</option>
-                                <option value={6}>Expand to Level 6 (All)</option>
+                <option value={6}>Expand to Level 6 (All)</option>
               </select>
             </div>
           </div>
@@ -619,7 +638,7 @@ export default function DashboardPage() {
                         </div>
 
                         <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-gray-600">
-                          {/* email removed by request */}
+                          {/* email removed */}
                           {phoneClean && (
                             <a
                               className="inline-flex items-center gap-1 rounded-full bg-emerald-50 text-emerald-700 px-2 py-0.5 border border-emerald-100 hover:bg-emerald-100"
@@ -759,4 +778,3 @@ export default function DashboardPage() {
     );
   }
 }
-
