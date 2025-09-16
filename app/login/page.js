@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useMemo } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { auth } from "@/lib/firebase";
 import {
@@ -14,10 +14,15 @@ const isValidEmail = (e) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(e || "").tr
 
 export default function LoginPage() {
   const router = useRouter();
-  const params = useSearchParams();
 
-  // Capture ?ref=... if present
-  const refId = useMemo(() => (params?.get("ref") || "").trim(), [params]);
+  // Capture ?ref=... safely (no useSearchParams; avoids Suspense requirement)
+  const [refId, setRefId] = useState("");
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const p = new URLSearchParams(window.location.search);
+      setRefId((p.get("ref") || "").trim());
+    }
+  }, []);
 
   // If already signed in, bounce to dashboard
   useEffect(() => {
@@ -35,8 +40,10 @@ export default function LoginPage() {
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [loading, setLoading] = useState(false);
+
   const emailOk = isValidEmail(email);
   const canSubmit = emailOk && password && !loading;
+  const registerHref = refId ? `/register?ref=${encodeURIComponent(refId)}` : "/register";
 
   const friendlyError = (codeOrMsg) => {
     const txt = String(codeOrMsg || "");
@@ -92,8 +99,6 @@ export default function LoginPage() {
     }
   };
 
-  const registerHref = refId ? `/register?ref=${encodeURIComponent(refId)}` : "/register";
-
   return (
     <div className="min-h-screen bg-white">
       <div className="mx-auto max-w-md px-4 py-10">
@@ -115,7 +120,7 @@ export default function LoginPage() {
           </h1>
 
           {/* Referral banner */}
-          {refId && (
+          {!!refId && (
             <div className="mt-3 rounded-xl border border-blue-200 bg-blue-50 px-4 py-2 text-xs text-blue-800">
               Referred by <span className="font-mono font-semibold">{refId}</span>. If you don’t have an account yet, please{" "}
               <a href={registerHref} className="underline font-medium">create one here</a>.
