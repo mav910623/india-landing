@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import Image from "next/image";
 import { auth, db } from "@/lib/firebase";
 import { onAuthStateChanged, signOut } from "firebase/auth";
 import {
@@ -23,6 +24,93 @@ const MAX_DEPTH = 6;
 const PAGE_SIZE = 50;
 const L1_GOAL = 10;
 const HELP_TARGET = 3;
+
+/** ===== Small Components ===== */
+function StatCard({ label, value, tone }) {
+  const tones = {
+    green: "bg-green-50 text-green-700 border-green-100",
+    blue: "bg-blue-50 text-blue-700 border-blue-100",
+    purple: "bg-purple-50 text-purple-700 border-purple-100",
+  };
+  return (
+    <div
+      className={`mx-auto max-w-xs rounded-2xl border ${
+        tones[tone] || "border-gray-100"
+      } p-4 text-center shadow-sm`}
+    >
+      <div className="text-xs font-medium opacity-80">{label}</div>
+      <div className="mt-1 text-2xl font-semibold">{value}</div>
+    </div>
+  );
+}
+
+/** ===== Mission Card (big ring + tooltip) ===== */
+function MissionCard({
+  title,
+  subtitle,
+  progress,
+  pct,
+  done,
+  locked,
+  ctaLabel,
+  onCta,
+}) {
+  const R = 34; // radius for ~80px ring
+  const C = 2 * Math.PI * R;
+  const off = C * (1 - (pct || 0) / 100);
+
+  return (
+    <div
+      className={`rounded-2xl border border-gray-100 bg-white/80 p-4 shadow-sm ${
+        locked ? "opacity-50" : ""
+      }`}
+      title="Mission progress"
+    >
+      <h3 className="font-semibold text-gray-900">{title}</h3>
+      {subtitle && <p className="mt-0.5 text-xs text-gray-600">{subtitle}</p>}
+
+      <div className="mt-2 flex items-center gap-3">
+        <div className="relative w-20 h-20" title={`${pct || 0}%`}>
+          <svg className="w-20 h-20">
+            <circle
+              className="text-gray-200"
+              strokeWidth="6"
+              stroke="currentColor"
+              fill="transparent"
+              r={R}
+              cx="40"
+              cy="40"
+            />
+            <circle
+              className={done ? "text-green-500" : "text-blue-500"}
+              strokeWidth="6"
+              strokeLinecap="round"
+              stroke="currentColor"
+              fill="transparent"
+              r={R}
+              cx="40"
+              cy="40"
+              strokeDasharray={C}
+              strokeDashoffset={off}
+            />
+          </svg>
+          <div className="absolute inset-0 flex items-center justify-center text-xs font-bold">
+            {progress}
+          </div>
+        </div>
+
+        <button
+          onClick={onCta}
+          disabled={locked}
+          className="flex-1 rounded-xl bg-blue-600 text-white px-3 py-2 text-sm font-medium hover:bg-blue-700 disabled:bg-gray-300"
+          title={locked ? "Unlock by completing previous mission" : "Go"}
+        >
+          {locked ? "Locked" : ctaLabel}
+        </button>
+      </div>
+    </div>
+  );
+}
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -307,7 +395,7 @@ export default function DashboardPage() {
         const toExpand = new Set(expanded);
         if (currentUid) toExpand.add(currentUid);
 
-        for (const hit of payload.results || []) {
+        for (const hit of (payload.results || [])) {
           const path = hit.path || [];
           for (const pid of path) {
             await fetchChildren(pid);
@@ -394,7 +482,7 @@ export default function DashboardPage() {
                 <span className="text-gray-700">{greeting()}, </span>
                 <span className="font-bold">{userData?.name}</span>
               </div>
-              {/* Show email now (requested) */}
+              {/* Show email now */}
               {userData?.email && (
                 <div className="text-xs text-gray-500">{userData.email}</div>
               )}
@@ -426,12 +514,13 @@ export default function DashboardPage() {
 
                 <div className="flex flex-col items-center" style={{ width: qrSize }}>
                   <div className="rounded-2xl overflow-hidden shadow-sm ring-1 ring-gray-100">
-                    {/* next/image recommended, leaving img for simplicity */}
-                    <img
+                    <Image
                       src={qrDataUrl || "data:image/gif;base64,R0lGODlhAQABAAAAACw="}
                       alt="Referral QR"
                       width={qrSize}
                       height={qrSize}
+                      priority
+                      unoptimized
                       className="block"
                       style={{ width: qrSize, height: qrSize }}
                     />
@@ -526,7 +615,7 @@ export default function DashboardPage() {
           )}
         </section>
 
-        {/* ===== Missions (replaces old checklist) ===== */}
+        {/* ===== Missions ===== */}
         <section className="mt-6">
           <div className="rounded-2xl border border-gray-100 bg-white/80 shadow-sm p-4 sm:p-6">
             <div className="grid gap-4 sm:grid-cols-2">
@@ -653,7 +742,6 @@ export default function DashboardPage() {
                   hasActiveSearch={hasActiveSearch}
                   nodeMatches={nodeMatches}
                   isNodeOrDescendantMatch={isNodeOrDescendantMatch}
-                  // progress props
                   l1Progress={l1Progress}
                   fetchL1Progress={fetchL1Progress}
                 />
@@ -724,74 +812,6 @@ export default function DashboardPage() {
     }
     return false;
   }
-}
-
-/** ===== Mission Card (big ring + tooltip) ===== */
-function MissionCard({
-  title,
-  subtitle,
-  progress,
-  pct,
-  done,
-  locked,
-  ctaLabel,
-  onCta,
-}) {
-  const R = 34; // radius for ~80px ring
-  const C = 2 * Math.PI * R;
-  const off = C * (1 - (pct || 0) / 100);
-
-  return (
-    <div
-      className={`rounded-2xl border border-gray-100 bg-white/80 p-4 shadow-sm ${
-        locked ? "opacity-50" : ""
-      }`}
-      title="Mission progress"
-    >
-      <h3 className="font-semibold text-gray-900">{title}</h3>
-      {subtitle && <p className="mt-0.5 text-xs text-gray-600">{subtitle}</p>}
-
-      <div className="mt-2 flex items-center gap-3">
-        <div className="relative w-20 h-20" title={`${pct || 0}%`}>
-          <svg className="w-20 h-20">
-            <circle
-              className="text-gray-200"
-              strokeWidth="6"
-              stroke="currentColor"
-              fill="transparent"
-              r={R}
-              cx="40"
-              cy="40"
-            />
-            <circle
-              className={done ? "text-green-500" : "text-blue-500"}
-              strokeWidth="6"
-              strokeLinecap="round"
-              stroke="currentColor"
-              fill="transparent"
-              r={R}
-              cx="40"
-              cy="40"
-              strokeDasharray={C}
-              strokeDashoffset={off}
-            />
-          </svg>
-          <div className="absolute inset-0 flex items-center justify-center text-xs font-bold">
-            {progress}
-          </div>
-        </div>
-
-        <button
-          onClick={onCta}
-          disabled={locked}
-          className="flex-1 rounded-xl bg-blue-600 text-white px-3 py-2 text-sm font-medium hover:bg-blue-700 disabled:bg-gray-300"
-          title={locked ? "Unlock by completing previous mission" : "Go"}
-        >
-          {locked ? "Locked" : ctaLabel}
-        </button>
-      </div>
-    </div>
-  );
 }
 
 /** ===== TreeChildren with colored L1 badges, champion 🏆, phone shown when expanded, and auto-load more ===== */
@@ -889,9 +909,7 @@ function TreeChildren({
             return (
               <li
                 key={u.id}
-                className={`py-2 sm:py-2.5 ${
-                  idx % 2 === 0 ? "bg-white" : "bg-gray-50"
-                }`}
+                className={`py-2 sm:py-2.5 ${idx % 2 === 0 ? "bg-white" : "bg-gray-50"}`}
               >
                 <div className="flex items-start sm:items-center justify-between gap-2">
                   <div className="flex items-start sm:items-center gap-2 min-w-0">
@@ -907,11 +925,7 @@ function TreeChildren({
                       <div className="h-7 w-7" />
                     )}
 
-                    <div
-                      className={`flex-1 min-w-0 rounded px-1 ${
-                        highlight ? "bg-yellow-50" : ""
-                      }`}
-                    >
+                    <div className={`flex-1 min-w-0 rounded px-1 ${highlight ? "bg-yellow-50" : ""}`}>
                       <div className="flex flex-wrap items-center gap-2">
                         <span className="inline-block rounded bg-gray-100 px-1.5 py-0.5 text-[10px] text-gray-700">
                           L{level}
@@ -920,12 +934,10 @@ function TreeChildren({
                           {u.name || "Unnamed"}
                         </span>
 
-                        {/* L1 mini progress badge + champion */}
+                        {/* L1 progress badge + champion */}
                         {badge !== undefined && (
                           <span
-                            className={`ml-1 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] border ${badgeStyle(
-                              badge
-                            )}`}
+                            className={`ml-1 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] border ${badgeStyle(badge)}`}
                             title="Their own Level 1 progress"
                           >
                             {badge >= 10 && <span aria-hidden>🏆</span>}
@@ -934,7 +946,7 @@ function TreeChildren({
                         )}
                       </div>
 
-                      {/* Show phone + WhatsApp ONLY when row is opened (mobile-friendly) */}
+                      {/* Phone + WhatsApp ONLY when row is opened (mobile-friendly) */}
                       {isOpen && (
                         <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-gray-700">
                           {phoneDigits && (
@@ -942,9 +954,7 @@ function TreeChildren({
                               <span className="font-mono">{u.phone}</span>
                               <a
                                 className="inline-flex items-center gap-1 rounded-full bg-emerald-50 text-emerald-700 px-2 py-0.5 border border-emerald-100 hover:bg-emerald-100"
-                                href={`https://wa.me/${phoneDigits}?text=${encodeURIComponent(
-                                  `Hi ${u.name || ""},`
-                                )}`}
+                                href={`https://wa.me/${phoneDigits}?text=${encodeURIComponent(`Hi ${u.name || ""},`)}`}
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 title="Message on WhatsApp"
@@ -954,9 +964,7 @@ function TreeChildren({
                             </>
                           )}
                           <span className="opacity-40 hidden sm:inline">•</span>
-                          <span className="font-mono text-blue-700 truncate">
-                            {u.referralId}
-                          </span>
+                          <span className="font-mono text-blue-700 truncate">{u.referralId}</span>
                         </div>
                       )}
                     </div>
@@ -1002,15 +1010,12 @@ function TreeChildren({
   // Virtualized list (large sets)
   return (
     <div className="relative">
-      <div
-        ref={parentRef}
-        className="overflow-auto overflow-x-hidden"
-        style={{ maxHeight: 560 }}
-      >
-        <ul
-          className="relative"
-          style={{ height: rowVirtualizer.getTotalSize() }}
-        >
+      <div ref={parentRef} className="overflow-auto overflow-x-hidden" style={{ maxHeight: 560 }}>
+        <ul className="relative" style={{ height: useVirtualizer.getTotalSize ? 0 : 0 }}>
+          {/* We won't render static height here; real height below via rowVirtualizer */}
+        </ul>
+
+        <ul className="relative" style={{ height: rowVirtualizer.getTotalSize() }}>
           {rowVirtualizer.getVirtualItems().map((vi) => {
             const u = filteredKids[vi.index];
             const isOpen = expanded.has(u.id);
@@ -1023,9 +1028,7 @@ function TreeChildren({
               <li
                 key={u.id}
                 ref={rowVirtualizer.measureElement}
-                className={`absolute left-0 right-0 ${
-                  vi.index % 2 === 0 ? "bg-white" : "bg-gray-50"
-                }`}
+                className={`absolute left-0 right-0 ${vi.index % 2 === 0 ? "bg-white" : "bg-gray-50"}`}
                 style={{ transform: `translateY(${vi.start}px)` }}
               >
                 <div className="py-2 sm:py-2.5 border-b border-gray-100">
@@ -1043,11 +1046,7 @@ function TreeChildren({
                         <div className="h-7 w-7" />
                       )}
 
-                      <div
-                        className={`flex-1 min-w-0 rounded px-1 ${
-                          highlight ? "bg-yellow-50" : ""
-                        }`}
-                      >
+                      <div className={`flex-1 min-w-0 rounded px-1 ${highlight ? "bg-yellow-50" : ""}`}>
                         <div className="flex flex-wrap items-center gap-2">
                           <span className="inline-block rounded bg-gray-100 px-1.5 py-0.5 text-[10px] text-gray-700">
                             L{level}
@@ -1058,9 +1057,7 @@ function TreeChildren({
 
                           {badge !== undefined && (
                             <span
-                              className={`ml-1 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] border ${badgeStyle(
-                                badge
-                              )}`}
+                              className={`ml-1 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] border ${badgeStyle(badge)}`}
                               title="Their own Level 1 progress"
                             >
                               {badge >= 10 && <span aria-hidden>🏆</span>}
@@ -1077,9 +1074,7 @@ function TreeChildren({
                                 <span className="font-mono">{u.phone}</span>
                                 <a
                                   className="inline-flex items-center gap-1 rounded-full bg-emerald-50 text-emerald-700 px-2 py-0.5 border border-emerald-100 hover:bg-emerald-100"
-                                  href={`https://wa.me/${phoneDigits}?text=${encodeURIComponent(
-                                    `Hi ${u.name || ""},`
-                                  )}`}
+                                  href={`https://wa.me/${phoneDigits}?text=${encodeURIComponent(`Hi ${u.name || ""},`)}`}
                                   target="_blank"
                                   rel="noopener noreferrer"
                                   title="Message on WhatsApp"
@@ -1089,9 +1084,7 @@ function TreeChildren({
                               </>
                             )}
                             <span className="opacity-40 hidden sm:inline">•</span>
-                            <span className="font-mono text-blue-700 truncate">
-                              {u.referralId}
-                            </span>
+                            <span className="font-mono text-blue-700 truncate">{u.referralId}</span>
                           </div>
                         )}
                       </div>
@@ -1127,9 +1120,7 @@ function TreeChildren({
             <li
               ref={loadMoreRef}
               className="absolute left-0 right-0 h-10 flex items-center justify-center text-xs text-gray-500"
-              style={{
-                transform: `translateY(${rowVirtualizer.getTotalSize() - 40}px)`,
-              }}
+              style={{ transform: `translateY(${rowVirtualizer.getTotalSize() - 40}px)` }}
             >
               Loading more…
             </li>
