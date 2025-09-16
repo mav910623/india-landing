@@ -16,7 +16,7 @@ import {
   startAfter,
 } from "firebase/firestore";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { QRCodeCanvas } from "qrcode.react";
+import QRCode from "qrcode";
 
 const MAX_DEPTH = 6;
 const PAGE_SIZE = 50;
@@ -35,21 +35,20 @@ export default function DashboardPage() {
   const [treeLoading, setTreeLoading] = useState(false);
   const [treeError, setTreeError] = useState("");
 
-  // Counts (server, exact)
+  // Counts
   const [counts, setCounts] = useState({
     levels: { "1": 0, "2": 0, "3": 0, "4": 0, "5": 0, "6": 0 },
     sixPlus: 0,
     total: 0,
   });
 
-  // Tree data (client)
-  const [childrenCache, setChildrenCache] = useState({}); // parentUid -> User[]
-  const [parentOf, setParentOf] = useState({});            // childUid -> parentUid
-  const [expanded, setExpanded] = useState(new Set());     // expanded node IDs
-  const [expandLevel, setExpandLevel] = useState(1);       // dropdown
+  // Tree data
+  const [childrenCache, setChildrenCache] = useState({});
+  const [parentOf, setParentOf] = useState({});
+  const [expanded, setExpanded] = useState(new Set());
+  const [expandLevel, setExpandLevel] = useState(1);
 
-  // Per-node pagination
-  const [nodePages, setNodePages] = useState({}); // parentUid -> { items, cursor, hasMore }
+  const [nodePages, setNodePages] = useState({});
 
   // Search
   const [search, setSearch] = useState("");
@@ -62,8 +61,10 @@ export default function DashboardPage() {
   // Header dropdown
   const [menuOpen, setMenuOpen] = useState(false);
 
-  // Responsive QR size
+  // Responsive QR
   const [qrSize, setQrSize] = useState(120);
+  const [qrDataUrl, setQrDataUrl] = useState("");
+
   useEffect(() => {
     const compute = () => {
       const w = typeof window !== "undefined" ? window.innerWidth : 1024;
@@ -84,14 +85,13 @@ export default function DashboardPage() {
         setCurrentUid(currentUser.uid);
         await loadUser(currentUser.uid);
         await refreshCounts();
-        await expandToLevel(1); // auto L1
+        await expandToLevel(1);
       }
     });
     return () => unsub();
   }, [router]);
 
   async function loadUser(uid) {
-    setDashError("");
     try {
       const meSnap = await getDoc(doc(db, "users", uid));
       if (!meSnap.exists()) {
@@ -129,7 +129,6 @@ export default function DashboardPage() {
     }
   }
 
-  // ===== Helpers =====
   function normalize(s) {
     return String(s || "").toLowerCase();
   }
@@ -149,10 +148,24 @@ export default function DashboardPage() {
     return `${origin}/register?ref=${userData?.referralId || ""}`;
   }
 
-  // ===== Per-node children (paginated) =====
+  // Generate QR
+  useEffect(() => {
+    const link = referralLink();
+    if (!link) return;
+    QRCode.toDataURL(link, {
+      width: qrSize,
+      margin: 0,
+      errorCorrectionLevel: "M",
+    })
+      .then((url) => setQrDataUrl(url))
+      .catch((e) => {
+        console.error("QR generate failed", e);
+        setQrDataUrl("");
+      });
+  }, [qrSize, userData?.referralId]);
+
   async function fetchChildren(parentUid, { append = false } = {}) {
     if (!parentUid) return [];
-
     const page = nodePages[parentUid];
     if (!append && page?.items) return page.items;
 
@@ -182,7 +195,6 @@ export default function DashboardPage() {
         email: x.email || "",
         phone: x.phone || "",
         referralId: x.referralId || "",
-        createdAt: x.createdAt?.toDate ? x.createdAt.toDate() : null,
       };
     });
 
@@ -253,7 +265,6 @@ export default function DashboardPage() {
     setExpandLevel(0);
   }
 
-  // ===== Server search (fast, path-based) =====
   async function handleSearchChange(val) {
     setSearch(val);
     if (searchDebounce.current) clearTimeout(searchDebounce.current);
@@ -265,7 +276,6 @@ export default function DashboardPage() {
         else collapseAll();
         return;
       }
-
       try {
         setTreeLoading(true);
         const token = await auth.currentUser?.getIdToken();
@@ -275,15 +285,12 @@ export default function DashboardPage() {
         const payload = await res.json();
         if (!res.ok) throw new Error(payload?.error || "Search failed");
 
-        // Expand all ancestors from server-provided paths
         const toExpand = new Set(expanded);
         if (currentUid) toExpand.add(currentUid);
 
-        // Ensure each ancestor branch has its children fetched
         for (const hit of payload.results || []) {
           const path = hit.path || [];
-          for (let i = 0; i < path.length; i++) {
-            const pid = path[i];
+          for (const pid of path) {
             await fetchChildren(pid);
             toExpand.add(pid);
           }
@@ -305,7 +312,7 @@ export default function DashboardPage() {
   function nodeMatches(u) {
     const q = normalize(search);
     if (q.length < 2) return true;
-    const hay = `${normalize(u.name)} ${normalize(u.email)} ${normalize(u.referralId)}`;
+    const hay = `${normalize(u.name)} ${normalize(u.referralId)}`;
     return hay.includes(q);
   }
 
@@ -323,7 +330,6 @@ export default function DashboardPage() {
     return false;
   }
 
-  // Clipboard + logout
   function handleCopy() {
     if (userData?.referralId) {
       const link = referralLink();
@@ -338,7 +344,6 @@ export default function DashboardPage() {
     router.push("/login");
   }
 
-  // Greeting
   function greeting() {
     const h = new Date().getHours();
     if (h < 12) return "Good Morning";
@@ -356,7 +361,7 @@ export default function DashboardPage() {
 
   return (
     <div className="min-h-screen bg-white">
-      {/* Header (non-sticky) */}
+      {/* Header */}
       <header className="bg-blue-600 text-white shadow-sm">
         <div className="mx-auto max-w-4xl px-4 py-3 flex items-center justify-between">
           <h1 className="text-lg sm:text-xl font-semibold tracking-tight">
@@ -366,20 +371,14 @@ export default function DashboardPage() {
             <button
               onClick={() => setMenuOpen((v) => !v)}
               className="rounded-md bg-blue-500/70 px-3 py-1.5 text-sm font-medium hover:bg-blue-500 focus:outline-none"
-              aria-haspopup="menu"
-              aria-expanded={menuOpen ? "true" : "false"}
             >
               Menu ▾
             </button>
             {menuOpen && (
-              <div
-                className="absolute right-0 mt-2 w-40 rounded-md bg-white text-gray-800 shadow-lg ring-1 ring-black/5 overflow-hidden"
-                role="menu"
-              >
+              <div className="absolute right-0 mt-2 w-40 rounded-md bg-white text-gray-800 shadow-lg ring-1 ring-black/5">
                 <button
                   onClick={handleLogout}
                   className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50"
-                  role="menuitem"
                 >
                   Logout
                 </button>
@@ -392,14 +391,7 @@ export default function DashboardPage() {
       <div className="mx-auto max-w-4xl px-4 py-6 sm:py-8">
         {/* Identity */}
         <section className="rounded-2xl border border-gray-100 bg-white/80 shadow-sm p-4 sm:p-6">
-          {dashError && (
-            <div className="mb-4 rounded-xl bg-amber-50 px-4 py-3 text-sm text-amber-800 border border-amber-200">
-              {dashError}
-            </div>
-          )}
-
           <div className="flex flex-col-reverse gap-4 sm:flex-row sm:items-center sm:justify-between">
-            {/* Left: greeting & IDs */}
             <div className="space-y-1">
               <div className="text-base sm:text-lg font-medium text-gray-900">
                 <span className="text-gray-700">{greeting()}, </span>
@@ -416,12 +408,17 @@ export default function DashboardPage() {
                 </div>
               )}
             </div>
-
-            {/* Right: QR + integrated copy button (mobile friendly) */}
             <div className="self-end sm:self-auto">
               <div className="rounded-2xl border border-gray-200 bg-white shadow-sm p-2 flex flex-col items-center">
                 <div className="rounded-xl overflow-hidden shadow-sm">
-                  <QRCodeCanvas value={referralLink()} size={qrSize} level="M" includeMargin={false} />
+                  <img
+                    src={qrDataUrl || "data:image/gif;base64,R0lGODlhAQABAAAAACw="}
+                    alt="Referral QR"
+                    width={qrSize}
+                    height={qrSize}
+                    className="block rounded-xl shadow-sm"
+                    style={{ width: qrSize, height: qrSize }}
+                  />
                 </div>
                 <button
                   onClick={handleCopy}
@@ -437,14 +434,9 @@ export default function DashboardPage() {
           </div>
         </section>
 
-        {/* Stats — fully centered */}
-        <section className="mt-6">
-          <div className="flex justify-center">
-            <div className="w-full sm:w-auto grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
-              <StatCard label="Total Downlines" value={counts.total} tone="green" />
-            </div>
-          </div>
-
+        {/* Stats */}
+        <section className="mt-6 text-center">
+          <StatCard label="Total Downlines" value={counts.total} tone="green" />
           <div className="mt-3 -mx-1 overflow-x-auto">
             <div className="flex justify-center gap-2 px-1 pb-1">
               {[1, 2, 3, 4, 5].map((l) => (
@@ -460,15 +452,13 @@ export default function DashboardPage() {
               ))}
               <span className="inline-flex items-center rounded-full border border-purple-200 bg-purple-50 px-3 py-1 text-xs text-purple-700">
                 6+
-                <span className="ml-1.5 font-semibold">
-                  {counts.sixPlus || 0}
-                </span>
+                <span className="ml-1.5 font-semibold">{counts.sixPlus || 0}</span>
               </span>
             </div>
           </div>
         </section>
 
-        {/* Team / Tree (minimal indentation + shaded rows) */}
+        {/* Tree */}
         <section className="mt-8 rounded-2xl border border-gray-100 bg-white/80 shadow-sm p-4 sm:p-6">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
             <div>
@@ -476,7 +466,7 @@ export default function DashboardPage() {
                 Your Team
               </h2>
               <p className="text-xs text-gray-500 mt-1">
-                Minimal indent for drill down. Search by name / email / ID.
+                Minimal indent for drill down. Search by name / ID.
               </p>
             </div>
             <div className="flex gap-2">
@@ -494,7 +484,6 @@ export default function DashboardPage() {
                   else await expandToLevel(val);
                 }}
                 className="rounded-xl border border-gray-200 px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                title="Expand depth"
               >
                 <option value={0}>Collapse all</option>
                 <option value={1}>Expand to Level 1</option>
@@ -502,7 +491,7 @@ export default function DashboardPage() {
                 <option value={3}>Expand to Level 3</option>
                 <option value={4}>Expand to Level 4</option>
                 <option value={5}>Expand to Level 5</option>
-                <option value={6}>Expand to Level 6 (All)</option>
+                                <option value={6}>Expand to Level 6 (All)</option>
               </select>
             </div>
           </div>
@@ -557,7 +546,7 @@ export default function DashboardPage() {
       purple: "bg-purple-50 text-purple-700 border-purple-100",
     };
     return (
-      <div className={`rounded-2xl border ${tones[tone] || "border-gray-100"} p-4 text-center shadow-sm`}>
+      <div className={`mx-auto max-w-xs rounded-2xl border ${tones[tone] || "border-gray-100"} p-4 text-center shadow-sm`}>
         <div className="text-xs font-medium opacity-80">{label}</div>
         <div className="mt-1 text-2xl font-semibold">{value}</div>
       </div>
@@ -724,7 +713,6 @@ export default function DashboardPage() {
                           </div>
 
                           <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-gray-600">
-                            {/* email removed */}
                             {phoneClean && (
                               <a
                                 className="inline-flex items-center gap-1 rounded-full bg-emerald-50 text-emerald-700 px-2 py-0.5 border border-emerald-100 hover:bg-emerald-100"
@@ -771,3 +759,4 @@ export default function DashboardPage() {
     );
   }
 }
+
