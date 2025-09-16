@@ -7,13 +7,13 @@ export const metadata = {
     template: "%s | NuVantage India",
   },
   description:
-    "NuVantage India Dashboard — build, duplicate, and multiply your team with clarity and elegance.",
-  themeColor: "#1e3a8a",
+    "NuVantage India Dashboard — Build · Duplicate · Multiply your team with clarity and elegance.",
+  themeColor: "#1e3a8a", // Indigo-900
   openGraph: {
     title: "NuVantage India",
     description:
-      "Build, Duplicate, Multiply — grow your team with NuVantage India.",
-    url: "https://your-vercel-domain.vercel.app", // update with your real domain
+      "Build · Duplicate · Multiply — grow your team with NuVantage India.",
+    url: "https://your-vercel-domain.vercel.app", // update with your live domain
     siteName: "NuVantage India",
     images: [
       {
@@ -30,17 +30,21 @@ export const metadata = {
     card: "summary_large_image",
     title: "NuVantage India",
     description:
-      "Build, Duplicate, Multiply — grow your team with NuVantage India.",
+      "Build · Duplicate · Multiply — grow your team with NuVantage India.",
     images: ["/og-nuvantage.png"],
   },
   icons: {
     icon: [
-      { url: "/favicon.ico" },
+      { url: "/favicon.png", type: "image/png", sizes: "48x48" },
       { url: "/nuvantage-icon.svg", type: "image/svg+xml" },
     ],
     apple: [{ url: "/apple-touch-icon.png", sizes: "180x180" }],
-    shortcut: ["/favicon.ico"],
+    shortcut: ["/favicon.png"],
   },
   applicationName: "NuVantage India",
   manifest: "/site.webmanifest",
 };
+
+export default function RootLayout({ children }) {
+  return (
+    <html lang="en" className="bg-white"
