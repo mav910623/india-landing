@@ -68,6 +68,9 @@ export default function DashboardPage() {
   const qrBoxRef = useRef(null);
   const iconPx = Math.min(28, Math.max(18, Math.floor(qrSize * 0.18)));
 
+  /** ===== Help panel ===== */
+  const [showHelp, setShowHelp] = useState(false);
+
   /** ===== Helpers ===== */
   function normalize(s) {
     return String(s || "").toLowerCase();
@@ -372,16 +375,25 @@ export default function DashboardPage() {
       <header className="bg-blue-600 text-white shadow-sm">
         <div className="mx-auto max-w-4xl px-4 py-3 flex items-center justify-between">
           <h1 className="text-lg sm:text-xl font-semibold tracking-tight">Team Dashboard</h1>
-          <button
-            onClick={async () => {
-              await signOut(auth);
-              router.push("/login");
-            }}
-            className="rounded-md bg-blue-500/70 px-3 py-1.5 text-sm hover:bg-blue-500"
-            title="Log out"
-          >
-            Logout
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setShowHelp(true)}
+              className="rounded-md bg-blue-500/70 px-3 py-1.5 text-sm hover:bg-blue-500"
+              title="How it works"
+            >
+              Help
+            </button>
+            <button
+              onClick={async () => {
+                await signOut(auth);
+                router.push("/login");
+              }}
+              className="rounded-md bg-blue-500/70 px-3 py-1.5 text-sm hover:bg-blue-500"
+              title="Log out"
+            >
+              Logout
+            </button>
+          </div>
         </div>
       </header>
 
@@ -540,6 +552,76 @@ export default function DashboardPage() {
           </div>
         </section>
 
+        {/* ===== Quick Guide (inline, collapsible and mobile-friendly) ===== */}
+        <section className="mt-8 rounded-2xl border border-gray-100 bg-white shadow-sm p-4 sm:p-6">
+          <h3 className="text-lg font-semibold text-gray-900">Quick Guide</h3>
+          <p className="text-xs text-gray-500 mt-1">
+            Start here. These short guidelines keep everyone on track.
+          </p>
+
+          <div className="mt-3 space-y-2">
+            <details className="group rounded-xl border border-gray-100 bg-gray-50 p-3 open:bg-white open:shadow-sm">
+              <summary className="flex cursor-pointer list-none items-center justify-between">
+                <span className="text-sm font-medium text-gray-900">Getting Started</span>
+                <span className="text-gray-400 group-open:rotate-180 transition">⌄</span>
+              </summary>
+              <ul className="mt-2 list-disc pl-5 text-sm text-gray-700 space-y-1">
+                <li>Tap <strong>Invite India Founders</strong> to copy your link.</li>
+                <li>Share by <strong>WhatsApp</strong> or show your <strong>QR</strong> in person.</li>
+                <li>Registrations appear in your <strong>Level 1</strong>.</li>
+              </ul>
+            </details>
+
+            <details className="group rounded-xl border border-gray-100 bg-gray-50 p-3 open:bg-white open:shadow-sm">
+              <summary className="flex cursor-pointer list-none items-center justify-between">
+                <span className="text-sm font-medium text-gray-900">Mission 1 — 10 India Founders</span>
+                <span className="text-gray-400 group-open:rotate-180 transition">⌄</span>
+              </summary>
+              <ul className="mt-2 list-disc pl-5 text-sm text-gray-700 space-y-1">
+                <li>Goal: <strong>10</strong> on Level 1.</li>
+                <li>Progress ring shows <strong>current / 10</strong>.</li>
+                <li>Keep sharing until you hit <strong>10/10</strong>.</li>
+              </ul>
+            </details>
+
+            <details className="group rounded-xl border border-gray-100 bg-gray-50 p-3 open:bg-white open:shadow-sm">
+              <summary className="flex cursor-pointer list-none items-center justify-between">
+                <span className="text-sm font-medium text-gray-900">Mission 2 — Team Growth</span>
+                <span className="text-gray-400 group-open:rotate-180 transition">⌄</span>
+              </summary>
+              <ul className="mt-2 list-disc pl-5 text-sm text-gray-700 space-y-1">
+                <li>Unlocks after Mission 1.</li>
+                <li>Help <strong>3</strong> of your Level 1 reach <strong>10/10</strong> (you’ll see 🏆 next to their names).</li>
+                <li>Open <strong>Your Team</strong> and message them on WhatsApp.</li>
+              </ul>
+            </details>
+
+            <details className="group rounded-xl border border-gray-100 bg-gray-50 p-3 open:bg-white open:shadow-sm">
+              <summary className="flex cursor-pointer list-none items-center justify-between">
+                <span className="text-sm font-medium text-gray-900">Team & Search</span>
+                <span className="text-gray-400 group-open:rotate-180 transition">⌄</span>
+              </summary>
+              <ul className="mt-2 list-disc pl-5 text-sm text-gray-700 space-y-1">
+                <li>Tap <strong>+</strong> to open more levels. Use the dropdown to expand to L1–L6 quickly.</li>
+                <li>Use <strong>Search</strong> (name or ID). We’ll auto-open matching branches for you.</li>
+                <li>Phone & WhatsApp buttons show when a row is <strong>expanded</strong> (mobile-friendly).</li>
+              </ul>
+            </details>
+
+            <details className="group rounded-xl border border-gray-100 bg-gray-50 p-3 open:bg-white open:shadow-sm">
+              <summary className="flex cursor-pointer list-none items-center justify-between">
+                <span className="text-sm font-medium text-gray-900">Best Practices</span>
+                <span className="text-gray-400 group-open:rotate-180 transition">⌄</span>
+              </summary>
+              <ul className="mt-2 list-disc pl-5 text-sm text-gray-700 space-y-1">
+                <li>Send your link with a <strong>short personal note</strong>.</li>
+                <li>Follow up within <strong>24 hours</strong> if they haven’t registered.</li>
+                <li>Celebrate wins—send a quick “🎉 congrats” when someone reaches milestones.</li>
+              </ul>
+            </details>
+          </div>
+        </section>
+
         {/* ===== Team ===== */}
         <section
           id="teamSection"
@@ -671,6 +753,61 @@ export default function DashboardPage() {
           </a>
         </div>
       </div>
+
+      {/* Help panel (lightweight modal) */}
+      {showHelp && (
+        <div className="fixed inset-0 z-[70]">
+          <button
+            aria-label="Close"
+            onClick={() => setShowHelp(false)}
+            className="absolute inset-0 bg-black/40"
+          />
+          <div className="absolute inset-x-0 bottom-0 sm:inset-auto sm:top-1/2 sm:left-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 w-full sm:w-[560px]">
+            <div className="m-0 sm:m-0 rounded-t-2xl sm:rounded-2xl border border-gray-100 bg-white shadow-xl p-4 sm:p-5">
+              <div className="flex items-center justify-between">
+                <h4 className="text-base font-semibold text-gray-900">How it works</h4>
+                <button
+                  onClick={() => setShowHelp(false)}
+                  className="rounded-lg border border-gray-200 px-2 py-1 text-xs text-gray-700 hover:bg-gray-50"
+                >
+                  Close
+                </button>
+              </div>
+
+              <ol className="mt-3 list-decimal pl-5 space-y-2 text-sm text-gray-700">
+                <li><strong>Copy your link</strong> or show your <strong>QR</strong> to invite India Founders.</li>
+                <li>Watch new registrations appear in <strong>Level 1</strong>.</li>
+                <li>Finish <strong>Mission 1 (10/10)</strong>, then help <strong>3</strong> Level 1 reach <strong>10/10</strong> for Mission 2.</li>
+                <li>Use <strong>Search</strong> and tap <strong>+</strong> to open deeper levels.</li>
+                <li>Open a row to see <strong>Phone</strong> & <strong>WhatsApp</strong> for quick follow-ups.</li>
+              </ol>
+
+              <div className="mt-4 grid grid-cols-2 gap-2">
+                <a
+                  href="#teamSection"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    setShowHelp(false);
+                    document.getElementById("teamSection")?.scrollIntoView({ behavior: "smooth" });
+                  }}
+                  className="rounded-xl border border-gray-200 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 text-center"
+                >
+                  Go to Team
+                </a>
+                <button
+                  onClick={() => {
+                    setShowHelp(false);
+                    handleCopy();
+                  }}
+                  className="rounded-xl bg-blue-600 text-white px-3 py-2 text-sm hover:bg-blue-700"
+                >
+                  Copy Invite Link
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 
@@ -743,7 +880,7 @@ function MissionCard({ title, subtitle, progress, pct, done, locked, ctaLabel, o
   );
 }
 
-/** ===== Tree with colored badges, champion, phone on expand, auto-load more, virtualized when big ===== */
+/** ===== Tree with colored badges, champion on 10, phone on expand, auto-load more, virtualized when big ===== */
 function TreeChildren({
   parentId,
   level,
@@ -816,7 +953,7 @@ function TreeChildren({
     );
   }
 
-  // Non-virtualized list (mobile sets / small sets)
+  // Non-virtualized list (mobile / small sets)
   if (!manyRows) {
     return (
       <div className="relative">
