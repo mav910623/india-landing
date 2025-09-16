@@ -26,6 +26,7 @@ const STORAGE_KEYS = {
   COACH_V: "india_dash_seenCoachV1",
 };
 const L1_GOAL = 10;
+const HELP_TARGET = 3;
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -49,11 +50,15 @@ export default function DashboardPage() {
   });
 
   /** ===== Tree data ===== */
-  const [childrenCache, setChildrenCache] = useState({});
-  const [parentOf, setParentOf] = useState({});
-  const [expanded, setExpanded] = useState(new Set());
-  const [expandLevel, setExpandLevel] = useState(1);
-  const [nodePages, setNodePages] = useState({});
+  const [childrenCache, setChildrenCache] = useState({}); // parentUid -> children[]
+  const [parentOf, setParentOf] = useState({});            // childUid -> parentUid
+  const [expanded, setExpanded] = useState(new Set());     // expanded node IDs
+  const [expandLevel, setExpandLevel] = useState(1);       // for dropdown
+  const [nodePages, setNodePages] = useState({});          // parentUid -> { items, cursor, hasMore }
+
+  /** ===== L1 progress (x/10) ===== */
+  const [l1Progress, setL1Progress] = useState({});        // userUid -> number (0..10+)
+  const [focusHelp3, setFocusHelp3] = useState(false);     // sort Level 1 by who needs help
 
   /** ===== Search ===== */
   const [search, setSearch] = useState("");
@@ -66,10 +71,11 @@ export default function DashboardPage() {
   /** ===== Header menu ===== */
   const [menuOpen, setMenuOpen] = useState(false);
 
-  /** ===== QR: data URL + responsive size via ResizeObserver ===== */
+  /** ===== QR: data URL + responsive size ===== */
   const [qrDataUrl, setQrDataUrl] = useState("");
   const [qrSize, setQrSize] = useState(120);
   const qrBoxRef = useRef(null);
+  const iconPx = Math.min(28, Math.max(18, Math.floor(qrSize * 0.18))); // icon size scales with QR
 
   /** ===== Onboarding & Coach-marks ===== */
   const [showOnboarding, setShowOnboarding] = useState(false);
@@ -79,7 +85,7 @@ export default function DashboardPage() {
   const [coachPos, setCoachPos] = useState({ top: 0, left: 0, w: 0, h: 0 });
   const coachTargets = ["qrShareBlock", "searchInput", "expandRootBtn"];
 
-  /** ===== Tooling refs for coach positioning ===== */
+  /** ===== Coach helpers ===== */
   const posCoach = (id) => {
     const el = document.getElementById(id);
     if (!el) return setCoachPos({ top: 0, left: 0, w: 0, h: 0 });
@@ -91,6 +97,31 @@ export default function DashboardPage() {
       h: r.height,
     });
   };
+  const gotoCoach = async (id) => {
+    const el = document.getElementById(id);
+    if (!el) return false;
+    try {
+      el.scrollIntoView({ behavior: "smooth", block: "center", inline: "center" });
+      await new Promise((res) => setTimeout(res, 350));
+      posCoach(id);
+      return true;
+    } catch {
+      posCoach(id);
+      return true;
+    }
+  };
+  useEffect(() => {
+    const onScrollOrResize = () => {
+      if (!showCoach) return;
+      posCoach(coachTargets[coachStep]);
+    };
+    window.addEventListener("scroll", onScrollOrResize, { passive: true });
+    window.addEventListener("resize", onScrollOrResize);
+    return () => {
+      window.removeEventListener("scroll", onScrollOrResize);
+      window.removeEventListener("resize", onScrollOrResize);
+    };
+  }, [showCoach, coachStep]);
 
   /** ===== QR container observer ===== */
   useEffect(() => {
@@ -105,7 +136,7 @@ export default function DashboardPage() {
     const ro = new ResizeObserver((entries) => {
       for (const entry of entries) {
         const cw = entry.contentRect.width || 140;
-        const s = Math.max(96, Math.min(200, Math.floor(cw - 12))); // crisp codes
+        const s = Math.max(96, Math.min(200, Math.floor(cw - 12)));
         setQrSize(s);
       }
     });
@@ -124,17 +155,17 @@ export default function DashboardPage() {
         await refreshCounts();
         await expandToLevel(1);
 
-        // Onboarding / Coach triggers
         try {
           const seenOnb = localStorage.getItem(STORAGE_KEYS.ONBOARD_V);
           const seenCoach = localStorage.getItem(STORAGE_KEYS.COACH_V);
-          if (!seenOnb) setShowOnboarding(true);
-          else if (!seenCoach) {
-            // delay to ensure layout ready
-            setTimeout(() => {
+          if (!seenOnb) {
+            setOnStep(0);
+            setShowOnboarding(true);
+          } else if (!seenCoach) {
+            setTimeout(async () => {
               setShowCoach(true);
               setCoachStep(0);
-              posCoach(coachTargets[0]);
+              await gotoCoach(coachTargets[0]);
             }, 350);
           }
         } catch {}
@@ -367,25 +398,35 @@ export default function DashboardPage() {
     }, 250);
   }
 
-  function nodeMatches(u) {
-    const q = normalize(search);
-    if (q.length < 2) return true;
-    const hay = `${normalize(u.name)} ${normalize(u.referralId)}`;
-    return hay.includes(q);
+  /** ===== L1 progress helpers ===== */
+  async function fetchL1Progress(uid) {
+    // Return cached if present
+    if (l1Progress[uid] !== undefined) return l1Progress[uid];
+
+    // Count up to 10 (we only need to know if they reached 10)
+    const qy = query(collection(db, "users"), where("upline", "==", uid), limit(11));
+    const snap = await getDocs(qy);
+    const count = Math.min(10, snap.size >= 10 ? 10 : snap.size);
+    setL1Progress((prev) => ({ ...prev, [uid]: count }));
+    return count;
   }
-  function isNodeOrDescendantMatch(nodeId) {
-    const par = parentOf[nodeId];
-    if (par && childrenCache[par]) {
-      const me = childrenCache[par].find((x) => x.id === nodeId);
-      if (me && nodeMatches(me)) return true;
+
+  // For banner: compute how many L1 have reached 10
+  const l1Children = childrenCache[currentUid] || [];
+  const completedL1 = useMemo(() => {
+    let c = 0;
+    for (const kid of l1Children) {
+      const n = l1Progress[kid.id];
+      if (n !== undefined && n >= 10) c++;
     }
-    const kids = childrenCache[nodeId] || [];
-    for (const k of kids) {
-      if (nodeMatches(k)) return true;
-      if (isNodeOrDescendantMatch(k.id)) return true;
-    }
-    return false;
-  }
+    return c;
+  }, [l1Children, l1Progress]);
+
+  const goalDone = (counts.levels?.["1"] || 0) >= L1_GOAL;
+  const goalPct = Math.min(
+    100,
+    Math.round(((counts.levels?.["1"] || 0) / L1_GOAL) * 100)
+  );
 
   /** ===== Actions ===== */
   function handleCopy() {
@@ -402,20 +443,19 @@ export default function DashboardPage() {
     router.push("/login");
   }
 
-  /** ===== First-run: mark complete ===== */
+  /** ===== Onboarding control ===== */
   function completeOnboarding() {
     try {
       localStorage.setItem(STORAGE_KEYS.ONBOARD_V, "1");
     } catch {}
     setShowOnboarding(false);
-    // Start coach marks
-    setTimeout(() => {
+    setTimeout(async () => {
       try {
         const seenCoach = localStorage.getItem(STORAGE_KEYS.COACH_V);
         if (!seenCoach) {
           setShowCoach(true);
           setCoachStep(0);
-          posCoach(coachTargets[0]);
+          await gotoCoach(coachTargets[0]);
         }
       } catch {}
     }, 150);
@@ -427,12 +467,7 @@ export default function DashboardPage() {
     setShowCoach(false);
   }
 
-  /** ===== Derived ===== */
-  const l1Count = counts.levels?.["1"] || 0;
-  const goalDone = l1Count >= L1_GOAL;
-  const goalPct = Math.min(100, Math.round((l1Count / L1_GOAL) * 100));
-
-  /** ===== Loading screen ===== */
+  /** ===== Loading ===== */
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-white">
@@ -444,7 +479,7 @@ export default function DashboardPage() {
   /** ===== Render ===== */
   return (
     <div className="min-h-screen bg-white">
-      {/* Header (non-sticky) */}
+      {/* Header */}
       <header className="bg-blue-600 text-white shadow-sm">
         <div className="mx-auto max-w-4xl px-4 py-3 flex items-center justify-between">
           <h1 className="text-lg sm:text-xl font-semibold tracking-tight" title="Your personal team space">
@@ -499,55 +534,85 @@ export default function DashboardPage() {
               )}
             </div>
 
-            {/* Right: QR + Copy block (anchor id for coach) */}
+            {/* Right: QR card with icon-only actions */}
             <div className="self-start sm:self-auto w-full sm:w-auto" id="qrShareBlock">
               <div
                 ref={qrBoxRef}
-                className="rounded-2xl border border-gray-200 bg-white shadow-sm p-3 flex flex-col items-center w-full sm:w-auto"
+                className="rounded-2xl border border-gray-100 bg-white shadow-sm p-4 flex flex-col items-center w-full sm:w-auto"
                 title="Share this to invite"
               >
+                <div className="text-xs font-medium text-gray-600 mb-2">Invite with QR</div>
+
                 <div className="flex flex-col items-center" style={{ width: qrSize }}>
-                  <div className="rounded-xl overflow-hidden shadow-sm">
+                  <div className="rounded-2xl overflow-hidden shadow-sm ring-1 ring-gray-100">
                     <img
                       src={qrDataUrl || "data:image/gif;base64,R0lGODlhAQABAAAAACw="}
                       alt="Referral QR"
                       width={qrSize}
                       height={qrSize}
-                      className="block rounded-xl shadow-sm"
+                      className="block"
                       style={{ width: qrSize, height: qrSize }}
                     />
                   </div>
-                  <button
-                    onClick={handleCopy}
-                    className="mt-2 rounded-xl bg-blue-600 text-white px-3 py-2 text-sm hover:bg-blue-700 active:scale-[0.99] transition"
-                    style={{ width: "100%" }}
-                    title="Copy your referral link"
-                  >
-                    Copy Referral Link
-                  </button>
+
+                  {/* Icon bar under QR */}
+                  <div className="mt-2 grid grid-cols-2 gap-2 w-full">
+                    <button
+                      onClick={handleCopy}
+                      aria-label="Copy referral link"
+                      className="rounded-xl bg-blue-600 hover:bg-blue-700 transition flex items-center justify-center"
+                      title="Copy referral link"
+                      style={{ height: Math.max(36, Math.floor(qrSize * 0.28)) }}
+                    >
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        width={iconPx}
+                        height={iconPx}
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="white"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      >
+                        <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                      </svg>
+                    </button>
+                    <a
+                      href={`https://wa.me/?text=${encodeURIComponent(
+                        `Hey! Join my team here: ${referralLink()}`
+                      )}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      aria-label="Share on WhatsApp"
+                      className="rounded-xl border border-emerald-200 bg-emerald-50 hover:bg-emerald-100 transition flex items-center justify-center"
+                      title="Share on WhatsApp"
+                      style={{ height: Math.max(36, Math.floor(qrSize * 0.28)) }}
+                    >
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        width={iconPx}
+                        height={iconPx}
+                        viewBox="0 0 24 24"
+                        fill="currentColor"
+                        className="text-emerald-700"
+                      >
+                        <path d="M20.52 3.48A11.94 11.94 0 0 0 12.01 0C5.39 0 .04 5.35.04 11.96c0 2.11.55 4.16 1.6 5.99L0 24l6.2-1.62a11.95 11.95 0 0 0 5.81 1.49h.01c6.61 0 11.96-5.35 11.96-11.96 0-3.2-1.25-6.21-3.46-8.42ZM12.02 21.3h-.01a9.29 9.29 0 0 1-4.74-1.3l-.34-.2-3.68.96.98-3.58-.22-.37a9.27 9.27 0 0 1-1.42-4.9c0-5.12 4.17-9.29 9.3-9.29 2.48 0 4.81.96 6.57 2.72a9.25 9.25 0 0 1 2.72 6.57c0 5.13-4.17 9.29-9.3 9.29Zm5.35-6.94c-.29-.15-1.7-.84-1.96-.94-.26-.1-.45-.15-.64.15-.19.29-.74.94-.91 1.13-.17.19-.34.21-.63.07-.29-.15-1.22-.45-2.32-1.43-.86-.77-1.44-1.73-1.61-2.02-.17-.29-.02-.45.13-.6.14-.14.29-.37.43-.56.14-.19.19-.32.29-.53.1-.21.05-.39-.02-.54-.07-.15-.64-1.55-.88-2.12-.23-.56-.47-.49-.64-.5h-.55c-.19 0-.5.07-.76.37-.26.29-1 1-1 2.42s1.03 2.81 1.18 3.01c.15.19 2.03 3.09 4.91 4.34.69.3 1.23.48 1.65.61.69.22 1.31.19 1.8.12.55-.08 1.7-.7 1.94-1.37.24-.67.24-1.24.17-1.36-.07-.12-.26-.19-.55-.34Z" />
+                      </svg>
+                    </a>
+                  </div>
+
                   {copySuccess && (
                     <span className="mt-1 text-[11px] text-green-600">{copySuccess}</span>
                   )}
-                  {/* Quick WhatsApp share */}
-                  <a
-                    href={`https://wa.me/?text=${encodeURIComponent(
-                      `Hey! Join my team here: ${referralLink()}`
-                    )}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="mt-2 inline-flex items-center justify-center rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-700 hover:bg-emerald-100"
-                    style={{ width: "100%" }}
-                    title="Share on WhatsApp"
-                  >
-                    Share on WhatsApp
-                  </a>
                 </div>
               </div>
             </div>
           </div>
         </section>
 
-        {/* Stats — centered + Empty state */}
+        {/* Stats — centered */}
         <section className="mt-6 text-center">
           <StatCard label="Total Downlines" value={counts.total} tone="green" />
           <div className="mt-3 -mx-1 overflow-x-auto">
@@ -577,30 +642,29 @@ export default function DashboardPage() {
           )}
         </section>
 
-        {/* Checklist: Register 10 people (Level 1) */}
+        {/* Checklist + Help 3 banner */}
         <section className="mt-6">
           <div className="rounded-2xl border border-gray-100 bg-white/80 shadow-sm p-4 sm:p-6">
             <div className="flex items-center justify-between">
               <h3 className="text-sm font-semibold text-gray-900">
-                Get Started Checklist — Invite <span className="text-blue-700">10</span> People
+                Getting Started — Register 10 <span className="text-blue-700">India Founders</span>
               </h3>
-              <span className="text-xs text-gray-500">{l1Count}/{L1_GOAL}</span>
+              <span className="text-xs text-gray-500">
+                {(counts.levels?.["1"] || 0)}/{L1_GOAL}
+              </span>
             </div>
 
-            {/* Progress bar */}
             <div className="mt-3 h-2 w-full rounded bg-gray-100 overflow-hidden" aria-label="Progress to 10 L1">
               <div className="h-2 bg-blue-600 transition-all" style={{ width: `${goalPct}%` }} />
             </div>
 
-            {/* Guidance steps */}
             <ul className="mt-4 space-y-2 text-sm text-gray-700">
-              <li>1) <strong>Copy</strong> your link and send to friends/family.</li>
-              <li>2) Ask them to click and <strong>Register</strong> (they’ll become your Level 1).</li>
-              <li>3) Share your <strong>QR</strong> in person to make it super easy.</li>
-              <li>4) Use <strong>WhatsApp</strong> to follow up and answer questions.</li>
+              <li>1) <strong>Copy your link</strong> and send to your next India Founder.</li>
+              <li>2) Ask them to click and <strong>Register</strong> — they’ll show in <strong>Level 1</strong>.</li>
+              <li>3) Show your <strong>QR</strong> in person to make it super easy.</li>
+              <li>4) Follow up on <strong>WhatsApp</strong> with any questions.</li>
             </ul>
 
-            {/* Quick actions */}
             <div className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-2">
               <button
                 onClick={handleCopy}
@@ -632,15 +696,53 @@ export default function DashboardPage() {
             </div>
 
             {goalDone && (
-              <div className="mt-3 rounded-xl border border-green-100 bg-green-50 px-4 py-3 text-sm text-green-800">
-                🎉 Great job! You’ve reached 10 Level 1 members. Keep inviting to grow Levels 2–6.
+              <div className="mt-4 rounded-2xl border border-green-100 bg-green-50 px-4 py-3 text-sm text-green-800">
+                🎉 <strong>Great job!</strong> You registered 10 India Founders (Level 1).
+                <div className="mt-1 text-gray-700">
+                  <strong>Next mission:</strong> Help <strong>3</strong> of your Level 1 complete their own <strong>10</strong>.
+                </div>
+              </div>
+            )}
+
+            {goalDone && completedL1 < HELP_TARGET && (
+              <div className="mt-3 rounded-2xl border border-amber-100 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                  <div>
+                    <strong>Help 3 to reach 10:</strong> {completedL1}/{HELP_TARGET} done.
+                  </div>
+                  <div className="flex gap-2">
+                    <a
+                      href={`https://wa.me/?text=${encodeURIComponent(
+                        "Congrats on joining! Let’s get your first 10 sign-ups today. Here’s our guide: " + referralLink()
+                      )}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-700 hover:bg-emerald-100"
+                    >
+                      Message a Level 1
+                    </a>
+                    <a
+                      href="#teamSection"
+                      onClick={async (e) => {
+                        e.preventDefault();
+                        setFocusHelp3(true);
+                        // open L1 view
+                        await expandToLevel(1);
+                        document.getElementById("teamSection")?.scrollIntoView({ behavior: "smooth" });
+                      }}
+                      className="rounded-xl border border-gray-200 px-3 py-2 text-xs text-gray-700 hover:bg-gray-50"
+                    >
+                      Pick who to help
+                    </a>
+                  </div>
+                </div>
               </div>
             )}
           </div>
         </section>
 
         {/* Team / Tree */}
-        <section className="mt-8 rounded-2xl border border-gray-100 bg-white/80 shadow-sm p-4 sm:p-6">
+        <section id="teamSection" className="mt-8 rounded-2xl border border-gray-100 bg-white/80 shadow-sm p-4 sm:p-6">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
             <div>
               <h2 className="text-lg sm:text-xl font-semibold text-gray-900">
@@ -725,6 +827,11 @@ export default function DashboardPage() {
                   hasActiveSearch={hasActiveSearch}
                   nodeMatches={nodeMatches}
                   isNodeOrDescendantMatch={isNodeOrDescendantMatch}
+                  // progress props
+                  l1Progress={l1Progress}
+                  fetchL1Progress={fetchL1Progress}
+                  focusHelp3={focusHelp3}
+                  setFocusHelp3={setFocusHelp3}
                 />
               </div>
             )}
@@ -764,14 +871,21 @@ export default function DashboardPage() {
 
               <div className="mt-5 flex items-center justify-between">
                 <button
-                  onClick={() => (onStep > 0 ? setOnStep(onStep - 1) : setShowOnboarding(false))}
+                  onClick={() => {
+                    if (onStep === 0) {
+                      try { localStorage.setItem(STORAGE_KEYS.ONBOARD_V, "1"); } catch {}
+                      setShowOnboarding(false);
+                    } else {
+                      setOnStep((s) => Math.max(0, s - 1));
+                    }
+                  }}
                   className="rounded-xl border border-gray-200 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
                 >
                   {onStep === 0 ? "Skip" : "Back"}
                 </button>
                 {onStep < 2 ? (
                   <button
-                    onClick={() => setOnStep(onStep + 1)}
+                    onClick={() => setOnStep((s) => Math.min(2, s + 1))}
                     className="rounded-xl bg-blue-600 text-white px-4 py-2 text-sm hover:bg-blue-700"
                   >
                     Next
@@ -790,22 +904,43 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* ===== Coach-marks (3 bubbles) ===== */}
+      {/* ===== Coach-marks with SPOTLIGHT & tap-to-advance ===== */}
       {showCoach && (
         <CoachOverlay
           coachStep={coachStep}
           coachPos={coachPos}
-          onNext={() => {
+          onNext={async () => {
             const next = coachStep + 1;
             if (next >= coachTargets.length) return completeCoach();
             setCoachStep(next);
-            setTimeout(() => posCoach(coachTargets[next]), 25);
+            await gotoCoach(coachTargets[next]);
           }}
           onSkip={completeCoach}
         />
       )}
     </div>
   );
+
+  /** ===== Predicates for search highlighting ===== */
+  function nodeMatches(u) {
+    const q = normalize(search);
+    if (q.length < 2) return true;
+    const hay = `${normalize(u.name)} ${normalize(u.email)} ${normalize(u.referralId)}`;
+    return hay.includes(q);
+  }
+  function isNodeOrDescendantMatch(nodeId) {
+    const par = parentOf[nodeId];
+    if (par && childrenCache[par]) {
+      const me = childrenCache[par].find((x) => x.id === nodeId);
+      if (me && nodeMatches(me)) return true;
+    }
+    const kids = childrenCache[nodeId] || [];
+    for (const k of kids) {
+      if (nodeMatches(k)) return true;
+      if (isNodeOrDescendantMatch(k.id)) return true;
+    }
+    return false;
+  }
 }
 
 /** ===== Small Components ===== */
@@ -824,7 +959,7 @@ function StatCard({ label, value, tone }) {
   );
 }
 
-/** TreeChildren (props-in to avoid re-creating closures too much) */
+/** TreeChildren with L1 progress badges & optional “Help 3” focus ordering */
 function TreeChildren({
   parentId,
   level,
@@ -837,10 +972,40 @@ function TreeChildren({
   hasActiveSearch,
   nodeMatches,
   isNodeOrDescendantMatch,
+  l1Progress,
+  fetchL1Progress,
+  focusHelp3,
+  setFocusHelp3,
 }) {
-  const kids = childrenCache[parentId] || [];
+  const kidsRaw = childrenCache[parentId] || [];
+  let kids = kidsRaw;
+
+  // If focusing “Help 3” and we’re on Level 1, sort by progress ascending (undefined last)
+  if (focusHelp3 && level === 1) {
+    kids = [...kidsRaw].sort((a, b) => {
+      const av = l1Progress[a.id];
+      const bv = l1Progress[b.id];
+      const aHas = av !== undefined, bHas = bv !== undefined;
+      if (aHas && bHas) return av - bv;          // smaller first
+      if (aHas && !bHas) return -1;              // known before unknown
+      if (!aHas && bHas) return 1;
+      return 0;
+    });
+  }
+
   const filteredKids = hasActiveSearch ? kids.filter((u) => isNodeOrDescendantMatch(u.id)) : kids;
   const manyRows = filteredKids.length > 60;
+
+  // Kick off progress fetch lazily for visible Level 1 items
+  useEffect(() => {
+    if (level !== 1) return;
+    const toFetch = filteredKids.slice(0, 100); // safety cap
+    toFetch.forEach((u) => {
+      if (l1Progress[u.id] === undefined) {
+        fetchL1Progress?.(u.id);
+      }
+    });
+  }, [level, filteredKids, l1Progress, fetchL1Progress]);
 
   const parentRef = useRef(null);
   const rowVirtualizer = useVirtualizer({
@@ -854,7 +1019,7 @@ function TreeChildren({
   if (filteredKids.length === 0 && !(nodePages[parentId]?.hasMore)) {
     return (
       <div className="text-xs sm:text-sm text-gray-500 ml-1 sm:ml-2 py-1">
-        (no members at level {level})
+        (no members at level {level}) — share your link to grow this level
       </div>
     );
   }
@@ -868,6 +1033,7 @@ function TreeChildren({
             const canDrill = level < MAX_DEPTH;
             const highlight = hasActiveSearch && nodeMatches(u);
             const phoneClean = String(u.phone || "").trim();
+            const badge = level === 1 ? l1Progress[u.id] : null;
 
             return (
               <li key={u.id} className={`py-2 sm:py-2.5 ${idx % 2 === 0 ? "bg-white" : "bg-gray-50"}`}>
@@ -893,6 +1059,20 @@ function TreeChildren({
                         <span className="font-medium text-gray-900 truncate">
                           {u.name || "Unnamed"}
                         </span>
+
+                        {/* L1 mini progress badge */}
+                        {badge !== null && (
+                          <span
+                            className={`ml-1 inline-flex items-center rounded-full px-2 py-0.5 text-[10px] border ${
+                              badge >= 10
+                                ? "bg-green-50 text-green-700 border-green-100"
+                                : "bg-blue-50 text-blue-700 border-blue-100"
+                            }`}
+                            title="Their own Level 1 progress"
+                          >
+                            {badge !== undefined ? `${badge}/10` : "…/10"}
+                          </span>
+                        )}
                       </div>
 
                       <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-gray-600">
@@ -928,6 +1108,10 @@ function TreeChildren({
                       hasActiveSearch={hasActiveSearch}
                       nodeMatches={nodeMatches}
                       isNodeOrDescendantMatch={isNodeOrDescendantMatch}
+                      l1Progress={l1Progress}
+                      fetchL1Progress={fetchL1Progress}
+                      focusHelp3={focusHelp3}
+                      setFocusHelp3={setFocusHelp3}
                     />
                   </div>
                 )}
@@ -946,6 +1130,11 @@ function TreeChildren({
             </button>
           </div>
         )}
+
+        {/* If we were focusing Help 3 and this isn't level 1 anymore, turn it off to avoid confusion */}
+        {focusHelp3 && level !== 1 && (
+          <div className="sr-only">{setFocusHelp3(false)}</div>
+        )}
       </div>
     );
   }
@@ -961,6 +1150,7 @@ function TreeChildren({
             const canDrill = level < MAX_DEPTH;
             const highlight = hasActiveSearch && nodeMatches(u);
             const phoneClean = String(u.phone || "").trim();
+            const badge = level === 1 ? l1Progress[u.id] : null;
 
             return (
               <li
@@ -992,6 +1182,19 @@ function TreeChildren({
                           <span className="font-medium text-gray-900 truncate">
                             {u.name || "Unnamed"}
                           </span>
+
+                          {badge !== null && (
+                            <span
+                              className={`ml-1 inline-flex items-center rounded-full px-2 py-0.5 text-[10px] border ${
+                                badge >= 10
+                                  ? "bg-green-50 text-green-700 border-green-100"
+                                  : "bg-blue-50 text-blue-700 border-blue-100"
+                              }`}
+                              title="Their own Level 1 progress"
+                            >
+                              {badge !== undefined ? `${badge}/10` : "…/10"}
+                            </span>
+                          )}
                         </div>
 
                         <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-gray-600">
@@ -1027,6 +1230,10 @@ function TreeChildren({
                         hasActiveSearch={hasActiveSearch}
                         nodeMatches={nodeMatches}
                         isNodeOrDescendantMatch={isNodeOrDescendantMatch}
+                        l1Progress={l1Progress}
+                        fetchL1Progress={fetchL1Progress}
+                        focusHelp3={focusHelp3}
+                        setFocusHelp3={setFocusHelp3}
                       />
                     </div>
                   )}
@@ -1047,11 +1254,15 @@ function TreeChildren({
           </button>
         </div>
       )}
+
+      {focusHelp3 && level !== 1 && (
+        <div className="sr-only">{setFocusHelp3(false)}</div>
+      )}
     </div>
   );
 }
 
-/** Coach overlay component */
+/** Coach overlay with SPOTLIGHT, tap-to-advance on dimmer */
 function CoachOverlay({ coachStep, coachPos, onNext, onSkip }) {
   const steps = [
     { title: "Invite here", body: "Copy or share this to invite." },
@@ -1059,18 +1270,37 @@ function CoachOverlay({ coachStep, coachPos, onNext, onSkip }) {
     { title: "Open levels", body: "Tap + to see your next level." },
   ];
 
-  const bubbleTop = coachPos.top + coachPos.h + 12;
-  const bubbleLeft = coachPos.left + Math.max(0, coachPos.w / 2 - 140);
+  const padding = 14;
+  const cx = coachPos.left + coachPos.w / 2;
+  const cy = coachPos.top + coachPos.h / 2;
+  const r = Math.max(coachPos.w, coachPos.h) / 2 + padding;
+
+  const viewportH = typeof window !== "undefined" ? window.innerHeight : 800;
+  const placeAbove = cy + r + 180 > viewportH;
+  const bubbleTop = placeAbove ? (cy - r - 120) : (cy + r + 12);
+  const bubbleLeft = Math.max(12, cx - 140);
+
+  const maskStyle = {
+    WebkitMaskImage: `radial-gradient(${r}px at ${cx}px ${cy}px, transparent 99%, black 100%)`,
+    maskImage: `radial-gradient(${r}px at ${cx}px ${cy}px, transparent 99%, black 100%)`,
+  };
 
   return (
     <div className="fixed inset-0 z-[70]">
-      {/* Dimmer */}
-      <div className="absolute inset-0 bg-black/40" />
+      {/* Dimmer with cut-out; click to advance (or finish -> skip) */}
+      <button
+        onClick={onNext}
+        className="absolute inset-0 bg-black/50"
+        style={maskStyle}
+        aria-label="Next"
+        title="Tap to continue"
+      />
 
       {/* Bubble */}
       <div
-        className="absolute w-[280px] rounded-2xl border border-gray-100 bg-white shadow-xl p-4"
+        className="absolute w-[280px] rounded-2xl border border-gray-100 bg-white shadow-xl p-4 pointer-events-auto"
         style={{ top: bubbleTop, left: bubbleLeft }}
+        onClick={(e) => e.stopPropagation()}
       >
         <div className="text-sm font-semibold text-gray-900">{steps[coachStep].title}</div>
         <div className="mt-1 text-xs text-gray-600">{steps[coachStep].body}</div>
