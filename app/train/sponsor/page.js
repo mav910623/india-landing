@@ -1,302 +1,351 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Image from "next/image";
-import Link from "next/link";
-import { onAuthStateChanged } from "firebase/auth";
+import { useRouter } from "next/navigation";
 import { auth, db } from "@/lib/firebase";
-import { doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
+import {
+  doc,
+  getDoc,
+  setDoc,
+  updateDoc,
+  serverTimestamp,
+} from "firebase/firestore";
 
-/** =========================================================
- *  Simple content (kid-friendly)
- * ======================================================== */
-const MODULES = [
-  {
-    id: "m1",
-    num: 1,
-    title: "Getting Started",
-    goal: "Make a small list and invite people nicely.",
-    steps: [
-      "Think happy. Be kind. Keep it simple.",
-      "Write 20 names you know. Friends and family are okay.",
-      "Invite: “I found something good. 15 minutes to see?”",
-    ],
-  },
-  {
-    id: "m2",
-    num: 2,
-    title: "Show the Chance & Products",
-    goal: "Explain what it is in a few minutes.",
-    steps: [
-      "Why now: India is starting. Good timing.",
-      "How to grow: Build → Duplicate → Multiply.",
-      "Share 2–3 hero products. Talk about results, not big words.",
-    ],
-  },
-  {
-    id: "m3",
-    num: 3,
-    title: "ABC: Connect People to Help",
-    goal: "A = a helpful thing, B = you connect, C = your friend.",
-    steps: [
-      "A = a meeting, an upline, or a short recording.",
-      "B = you say a few words to link them.",
-      "C = your friend. Book the next step within 24 hours.",
-    ],
-  },
-];
+/** Ensure CSR */
+export const dynamic = "force-dynamic";
+export const fetchCache = "force-no-store";
 
-/** Local storage key (per-user when we have uid) */
-const lsKey = (uid) => `nuvtg.learn.progress:${uid || "anon"}`;
-
-/** Small helpers */
-const clamp = (n, a, b) => Math.max(a, Math.min(b, n));
-
-/** =========================================================
- *  Page
- * ======================================================== */
-export default function SponsorTrainingPage() {
-  const [uid, setUid] = useState(null);
-  const [progress, setProgress] = useState({}); // { m1: true/false, ... }
-  const [expanded, setExpanded] = useState(MODULES[0].id);
-  const [saving, setSaving] = useState(false);
-
-  const firstRender = useRef(true);
-  const saveTimer = useRef(null);
-
-  /** Capture current user for Firestore sync */
-  useEffect(() => {
-    const unsub = onAuthStateChanged(auth, async (u) => {
-      setUid(u?.uid || null);
+/** --------------------------
+ *  Firestore helpers
+ * ------------------------- */
+async function ensureTrainingDoc(uid) {
+  const ref = doc(db, "users", uid);
+  const snap = await getDoc(ref);
+  // If user doc doesn't exist yet (edge case), create a minimal one
+  if (!snap.exists()) {
+    await setDoc(ref, {
+      uid,
+      createdAt: serverTimestamp(),
+      training: {
+        sponsor: {
+          gettingStarted: { watched: false, done: false },
+          oppPresentation: { done: false },
+          abc: { done: false },
+          updatedAt: serverTimestamp(),
+        },
+      },
     });
-    return () => unsub();
-  }, []);
-
-  /** Load progress (local first, then Firestore if logged in) */
-  useEffect(() => {
-    // 1) local
-    try {
-      const raw = localStorage.getItem(lsKey(uid));
-      if (raw) {
-        const saved = JSON.parse(raw);
-        if (saved && typeof saved === "object") setProgress(saved);
-      }
-    } catch {}
-
-    // 2) firestore
-    (async () => {
-      if (!uid) return;
-      try {
-        const snap = await getDoc(doc(db, "users", uid));
-        const data = snap.data() || {};
-        const modules = data?.learn?.modules || {};
-        if (modules && typeof modules === "object") {
-          setProgress((prev) => ({ ...prev, ...modules })); // merge local + remote
-        }
-      } catch (e) {
-        console.warn("Learn progress fetch failed:", e);
-      }
-    })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [uid]);
-
-  /** Persist on change: local immediately, Firestore debounced */
-  useEffect(() => {
-    // local
-    try {
-      localStorage.setItem(lsKey(uid), JSON.stringify(progress || {}));
-    } catch {}
-
-    // debounce remote
-    if (!uid) return; // not logged in => local only
-    if (firstRender.current) {
-      firstRender.current = false;
-      return;
-    }
-    if (saveTimer.current) clearTimeout(saveTimer.current);
-    saveTimer.current = setTimeout(async () => {
-      try {
-        setSaving(true);
-        await setDoc(
-          doc(db, "users", uid),
-          { learn: { modules: progress || {}, updatedAt: serverTimestamp() } },
-          { merge: true }
-        );
-      } catch (e) {
-        console.warn("Learn progress save failed:", e);
-      } finally {
-        setSaving(false);
-      }
-    }, 350);
-    return () => {
-      if (saveTimer.current) clearTimeout(saveTimer.current);
+    return {
+      training: {
+        sponsor: {
+          gettingStarted: { watched: false, done: false },
+          oppPresentation: { done: false },
+          abc: { done: false },
+        },
+      },
     };
-  }, [progress, uid]);
+  }
 
-  const doneCount = useMemo(
-    () => MODULES.reduce((n, m) => n + (progress[m.id] ? 1 : 0), 0),
-    [progress]
-  );
-  const totalCount = MODULES.length;
-  const pct = clamp(Math.round((doneCount / totalCount) * 100), 0, 100);
-
-  const nextModule = useMemo(
-    () => MODULES.find((m) => !progress[m.id]),
-    [progress]
-  );
-
-  const toggleDone = (id) => {
-    setProgress((p) => ({ ...p, [id]: !p[id] }));
+  const data = snap.data() || {};
+  const training = data.training || {};
+  const sponsor = training.sponsor || {};
+  // Seed missing fields (forward compatible)
+  const merged = {
+    gettingStarted: { watched: false, done: false, ...(sponsor.gettingStarted || {}) },
+    oppPresentation: { done: false, ...(sponsor.oppPresentation || {}) },
+    abc: { done: false, ...(sponsor.abc || {}) },
   };
 
-  const openOnly = (id) => setExpanded(id);
+  // If something was missing, persist the merge
+  if (
+    !sponsor.gettingStarted ||
+    sponsor.oppPresentation === undefined ||
+    sponsor.abc === undefined
+  ) {
+    await updateDoc(ref, {
+      "training.sponsor": {
+        ...merged,
+        updatedAt: serverTimestamp(),
+      },
+    });
+  }
+
+  return { training: { sponsor: merged } };
+}
+
+async function setSponsorProgress(uid, path, value) {
+  const ref = doc(db, "users", uid);
+  await updateDoc(ref, {
+    [`training.sponsor.${path}`]: value,
+    "training.sponsor.updatedAt": serverTimestamp(),
+  });
+}
+
+/** --------------------------
+ *  Page
+ * ------------------------- */
+export default function SponsorTrainingPage() {
+  const router = useRouter();
+  const [uid, setUid] = useState(null);
+  const [displayName, setDisplayName] = useState("");
+  const [loading, setLoading] = useState(true);
+
+  const [progress, setProgress] = useState({
+    gettingStarted: { watched: false, done: false },
+    oppPresentation: { done: false },
+    abc: { done: false },
+  });
+
+  useEffect(() => {
+    const unsub = auth.onAuthStateChanged(async (user) => {
+      if (!user) {
+        router.push("/login");
+        return;
+      }
+      setUid(user.uid);
+      setDisplayName(user.displayName || "India Founder");
+      const seeded = await ensureTrainingDoc(user.uid);
+      setProgress(seeded?.training?.sponsor || progress);
+      setLoading(false);
+    });
+    return () => unsub();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [router]);
+
+  const pct = useMemo(() => {
+    const total = 3;
+    const done =
+      (progress.gettingStarted?.done ? 1 : 0) +
+      (progress.oppPresentation?.done ? 1 : 0) +
+      (progress.abc?.done ? 1 : 0);
+    return Math.round((done / total) * 100);
+  }, [progress]);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen grid place-items-center bg-white">
+        <p className="text-gray-500">Loading…</p>
+      </div>
+    );
+  }
+
+  /** UI helpers */
+  const mark = async (key, value) => {
+    if (!uid) return;
+    const next = { ...progress, [key]: { ...(progress[key] || {}), ...value } };
+    setProgress(next); // optimistic
+    await setSponsorProgress(uid, key, next[key]);
+  };
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-sky-50 via-white to-white">
-      {/* ornaments */}
+      {/* Soft ornaments */}
       <div className="pointer-events-none fixed inset-0 -z-10">
         <div className="absolute -top-24 -left-16 h-72 w-72 rounded-full bg-blue-100/40 blur-3xl" />
         <div className="absolute -bottom-16 -right-24 h-72 w-72 rounded-full bg-indigo-100/40 blur-3xl" />
       </div>
 
-      <div className="mx-auto max-w-3xl px-4 py-8 sm:py-10">
-        {/* Brand */}
-        <div className="mb-6 flex flex-col items-center text-center">
+      <div className="mx-auto max-w-4xl px-4 py-8 sm:py-10">
+        {/* Brand header */}
+        <div className="mb-6 sm:mb-8 flex flex-col items-center text-center">
           <div className="rounded-2xl ring-1 ring-gray-100 shadow-sm p-3 bg-white">
             <Image
               src="/nuvantage-icon.svg"
               alt="NuVantage India"
-              width={88}
-              height={88}
+              width={96}
+              height={96}
               priority
               className="block"
             />
           </div>
           <h1 className="mt-4 text-[22px] sm:text-3xl font-semibold tracking-tight text-gray-900">
-            Learn to Sponsor
+            Learn How to Sponsor
           </h1>
           <p className="mt-1 text-sm text-gray-600">
-            Three small lessons. Easy steps. You can do this.
+            Hey {displayName}! Follow these 3 simple modules. Keep it easy, keep it fun.
           </p>
-        </div>
 
-        {/* Top progress + actions */}
-        <div className="mb-6 flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
-          <div className="inline-flex items-center gap-2 rounded-2xl border border-gray-200 bg-white px-3 py-2 text-sm text-gray-800 shadow-sm">
-            <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-blue-50 text-blue-700 text-xs font-semibold">
-              {doneCount}/{totalCount}
-            </span>
-            <span className="font-medium">{pct}% done</span>
-            {saving && <span className="text-xs text-gray-500">· saving…</span>}
+          {/* Progress pill */}
+          <div className="mt-3 inline-flex items-center gap-2 rounded-full border border-gray-200 bg-white px-3 py-1.5 text-xs text-gray-700 shadow-sm">
+            <span className="font-semibold">{pct}%</span> complete
           </div>
+        </div>
 
-          <div className="flex-1" />
+        {/* Card */}
+        <div className="rounded-3xl border border-gray-100/80 bg-white/80 backdrop-blur-sm p-5 sm:p-7 shadow-xl space-y-6">
+          {/* Module 1 */}
+          <section className="rounded-2xl border border-gray-100 bg-white p-4 sm:p-5 shadow-sm">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h2 className="text-base sm:text-lg font-semibold text-gray-900">
+                  1) Getting Started
+                </h2>
+                <p className="mt-1 text-sm text-gray-600">
+                  Watch this. Then do the tiny steps below. Simple.
+                </p>
+              </div>
+              <label className="inline-flex items-center gap-2 text-sm text-gray-700">
+                <input
+                  type="checkbox"
+                  className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                  checked={!!progress.gettingStarted?.done}
+                  onChange={(e) => mark("gettingStarted", { done: e.target.checked })}
+                />
+                Mark done
+              </label>
+            </div>
 
-          {nextModule && (
-            <button
-              onClick={() => openOnly(nextModule.id)}
-              className="rounded-2xl border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-700 hover:bg-blue-100 transition"
-              title="Go to the next lesson"
+            {/* Video */}
+            <div className="mt-3 aspect-video w-full overflow-hidden rounded-xl ring-1 ring-gray-100 shadow-sm bg-black">
+              <iframe
+                title="Getting Started — Sponsoring"
+                src="https://www.youtube.com/embed/hwBUMOZQVRk"
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                allowFullScreen
+                className="h-full w-full"
+                onLoad={() => mark("gettingStarted", { watched: true })}
+              />
+            </div>
+
+            {/* Super-simple summary */}
+            <div className="mt-4 grid gap-3 sm:grid-cols-2">
+              <div className="rounded-xl border border-blue-100 bg-blue-50/60 p-3">
+                <h3 className="text-sm font-semibold text-blue-900">Big idea (kid-friendly)</h3>
+                <ul className="mt-2 list-disc pl-5 text-sm text-blue-900 space-y-1.5">
+                  <li>Use the products yourself. Be your own proof.</li>
+                  <li>Write a small list of friends. Don’t guess who will say “yes”.</li>
+                  <li>Invite kindly. Share, don’t push.</li>
+                  <li>It’s okay if someone says “not now”. Keep going.</li>
+                </ul>
+                {/* Transcript citation (required) */}
+                <p className="sr-only">
+                  Source: training talk transcript. :contentReference[oaicite:0]{index=0}
+                </p>
+              </div>
+
+              <div className="rounded-xl border border-emerald-100 bg-emerald-50/60 p-3">
+                <h3 className="text-sm font-semibold text-emerald-900">Do these 5 tiny steps</h3>
+                <ol className="mt-2 list-decimal pl-5 text-sm text-emerald-900 space-y-1.5">
+                  <li>Pick your starter products and use them.</li>
+                  <li>Write your <strong>Top 20</strong> names (family, friends, coworkers, neighbors).</li>
+                  <li>Circle 3 names and message them today.</li>
+                  <li>Set a quick goal: become a <strong>Brand Representative</strong>.</li>
+                  <li>Book your next training / big event with your upline.</li>
+                </ol>
+              </div>
+            </div>
+
+            <details className="mt-3 rounded-xl border border-gray-100 bg-gray-50 p-3 text-sm text-gray-700">
+              <summary className="cursor-pointer select-none font-semibold">
+                Why these steps work
+              </summary>
+              <ul className="mt-2 list-disc pl-5 space-y-1.5">
+                <li>Products first → you have a real story to share.</li>
+                <li>Name list stops guessing → you invite more, worry less.</li>
+                <li>3 reach-outs a day → tiny daily wins beat big bursts.</li>
+                <li>Brand Rep goal → gives you a clear “first finish line”.</li>
+                <li>Events & classes → faster skills, stronger belief.</li>
+              </ul>
+            </details>
+          </section>
+
+          {/* Module 2 */}
+          <section className="rounded-2xl border border-gray-100 bg-white p-4 sm:p-5 shadow-sm">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h2 className="text-base sm:text-lg font-semibold text-gray-900">
+                  2) Opportunity & Product Presentation
+                </h2>
+                <p className="mt-1 text-sm text-gray-600">
+                  Learn to show the plan and 1–2 hero products. Keep it short and friendly.
+                </p>
+              </div>
+              <label className="inline-flex items-center gap-2 text-sm text-gray-700">
+                <input
+                  type="checkbox"
+                  className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                  checked={!!progress.oppPresentation?.done}
+                  onChange={(e) => mark("oppPresentation", { done: e.target.checked })}
+                />
+                Mark done
+              </label>
+            </div>
+
+            <div className="mt-3 grid gap-3 sm:grid-cols-2 text-sm text-gray-700">
+              <div className="rounded-xl border border-gray-100 bg-gray-50 p-3">
+                <h3 className="font-semibold">Say this (simple script)</h3>
+                <p className="mt-1">
+                  “I’m working on something new that helps people look and feel great.
+                  Can I show you a quick 10-minute idea and 2 products I like?”
+                </p>
+              </div>
+              <div className="rounded-xl border border-gray-100 bg-gray-50 p-3">
+                <h3 className="font-semibold">Your mini deck</h3>
+                <ul className="mt-1 list-disc pl-5 space-y-1">
+                  <li>1 slide: Why now (health/beauty/opportunity)</li>
+                  <li>2 slides: Your story + product results</li>
+                  <li>1 slide: How to start (simple pack + support)</li>
+                </ul>
+              </div>
+            </div>
+          </section>
+
+          {/* Module 3 */}
+          <section className="rounded-2xl border border-gray-100 bg-white p-4 sm:p-5 shadow-sm">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h2 className="text-base sm:text-lg font-semibold text-gray-900">
+                  3) How to do A-B-C
+                </h2>
+                <p className="mt-1 text-sm text-gray-600">
+                  A = Value Add (meeting/upline/tools) · B = Bridge (you) · C = Customer/Prospect.
+                  Your job: connect C to A.
+                </p>
+              </div>
+              <label className="inline-flex items-center gap-2 text-sm text-gray-700">
+                <input
+                  type="checkbox"
+                  className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                  checked={!!progress.abc?.done}
+                  onChange={(e) => mark("abc", { done: e.target.checked })}
+                />
+                Mark done
+              </label>
+            </div>
+
+            <div className="mt-3 grid gap-3 sm:grid-cols-2 text-sm text-gray-700">
+              <div className="rounded-xl border border-gray-100 bg-gray-50 p-3">
+                <h3 className="font-semibold">Quick example</h3>
+                <p className="mt-1">
+                  “Can I introduce you to my mentor for 10 minutes? They can answer your questions
+                  and show what to do first.”
+                </p>
+              </div>
+              <div className="rounded-xl border border-gray-100 bg-gray-50 p-3">
+                <h3 className="font-semibold">Best practices</h3>
+                <ul className="mt-1 list-disc pl-5 space-y-1">
+                  <li>Set the time and purpose clearly.</li>
+                  <li>Hype the value of A (why it helps).</li>
+                  <li>Stay in the chat; learn how your mentor answers.</li>
+                </ul>
+              </div>
+            </div>
+          </section>
+
+          {/* Footer CTAs */}
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-1">
+            <a
+              href="/dashboard"
+              className="inline-flex items-center justify-center rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-blue-700"
             >
-              Resume lesson {nextModule.num}
-            </button>
-          )}
-
-          <Link
-            href="/dashboard"
-            className="rounded-2xl border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 transition"
-            title="Back to dashboard"
-          >
-            ← Back
-          </Link>
+              Back to Dashboard
+            </a>
+            <p className="text-xs text-gray-500">
+              Your progress is saved automatically. Keep it simple. Do a little each day.
+            </p>
+          </div>
         </div>
-
-        {/* Modules */}
-        <div className="space-y-3">
-          {MODULES.map((m) => {
-            const open = expanded === m.id;
-            const done = !!progress[m.id];
-            return (
-              <section
-                key={m.id}
-                className="rounded-3xl border border-gray-100/80 bg-white/80 backdrop-blur-sm p-4 sm:p-5 shadow-xl"
-              >
-                {/* Header */}
-                <button
-                  onClick={() => openOnly(m.id)}
-                  aria-expanded={open}
-                  className="w-full text-left flex items-center gap-3"
-                >
-                  <span
-                    className={`inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-xl text-sm font-bold ${
-                      done ? "bg-green-100 text-green-700" : "bg-blue-100 text-blue-700"
-                    }`}
-                  >
-                    {m.num}
-                  </span>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <h2 className="text-base sm:text-lg font-semibold text-gray-900">
-                        {m.title}
-                      </h2>
-                      {done && (
-                        <span className="text-[11px] rounded-full border border-green-200 bg-green-50 text-green-700 px-2 py-0.5">
-                          Done
-                        </span>
-                      )}
-                    </div>
-                    <p className="mt-0.5 text-sm text-gray-600">{m.goal}</p>
-                  </div>
-                  <span
-                    className={`ml-2 text-gray-500 transition-transform ${open ? "rotate-180" : ""}`}
-                    aria-hidden
-                  >
-                    ▼
-                  </span>
-                </button>
-
-                {/* Body */}
-                {open && (
-                  <div className="mt-4 pl-11">
-                    <ol className="list-decimal pl-5 space-y-2 text-sm text-gray-800">
-                      {m.steps.map((s, i) => (
-                        <li key={i}>{s}</li>
-                      ))}
-                    </ol>
-
-                    <div className="mt-4 flex items-center gap-2">
-                      <button
-                        onClick={() => toggleDone(m.id)}
-                        className={`rounded-2xl px-4 py-2 text-sm font-semibold transition shadow-sm border ${
-                          done
-                            ? "bg-green-600 text-white hover:bg-green-700 border-green-600"
-                            : "bg-blue-600 text-white hover:bg-blue-700 border-blue-600"
-                        }`}
-                      >
-                        {done ? "Mark as Not Done" : "Mark as Done"}
-                      </button>
-
-                      {!done && m.id === "m1" && (
-                        <Link
-                          href="/dashboard"
-                          className="rounded-2xl border border-gray-200 bg-white px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition"
-                          title="Copy your referral link on the dashboard"
-                        >
-                          Ready to invite? Go to Dashboard
-                        </Link>
-                      )}
-                    </div>
-                  </div>
-                )}
-              </section>
-            );
-          })}
-        </div>
-
-        {/* Tiny footer tip */}
-        <p className="mt-6 text-center text-xs text-gray-500">
-          Tip: small steps every day win the game.
-        </p>
       </div>
     </div>
   );
