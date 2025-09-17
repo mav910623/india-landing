@@ -12,6 +12,7 @@
     "@tanstack/react-virtual": "^3.13.12",
     "firebase": "^12.2.1",
     "firebase-admin": "^13.5.0",
+    "libphonenumber-js": "^1.12.17",
     "next": "15.5.3",
     "qrcode": "^1.5.4",
     "react": "19.1.0",

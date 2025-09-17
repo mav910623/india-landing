@@ -16,6 +16,8 @@ import {
   writeBatch,
   limit,
 } from "firebase/firestore";
+// Build full country list at runtime (tiny import)
+import { getCountries, getCountryCallingCode } from "libphonenumber-js/min";
 
 /** =========================================================
  *  Build/runtime hints (CSR)
@@ -59,31 +61,19 @@ function constrainPanCore(core) {
   const raw = unmaskPan(core).slice(0, 10);
   let out = "";
   for (let i = 0; i < raw.length && out.length < 10; i++) {
-    const ch = raw[i],
-      idx = out.length;
-    if (idx <= 4 || idx === 9) {
-      if (/[A-Z]/.test(ch)) out += ch;
-    } else {
-      if (/[0-9]/.test(ch)) out += ch;
-    }
+    const ch = raw[i], idx = out.length;
+    if (idx <= 4 || idx === 9) { if (/[A-Z]/.test(ch)) out += ch; }
+    else { if (/[0-9]/.test(ch)) out += ch; }
   }
   return out;
 }
 function formatPanMasked(core10) {
   const c = constrainPanCore(core10);
   if (c.length <= 5) return c;
-  if (c.length <= 9) return `${c.slice(0, 5)}-${c.slice(5)}`;
-  return `${c.slice(0, 5)}-${c.slice(5, 9)}-${c.slice(9)}`;
+  if (c.length <= 9) return `${c.slice(0,5)}-${c.slice(5)}`;
+  return `${c.slice(0,5)}-${c.slice(5,9)}-${c.slice(9)}`;
 }
 const isValidPANCore = (core) => /^[A-Z]{5}[0-9]{4}[A-Z]$/.test(core);
-
-const COUNTRIES = [
-  { cc: "IN", flag: "🇮🇳", name: "India", dial: "+91", example: "9876543210" },
-  { cc: "MY", flag: "🇲🇾", name: "Malaysia", dial: "+60", example: "123456789" },
-  { cc: "SG", flag: "🇸🇬", name: "Singapore", dial: "+65", example: "81234567" },
-  { cc: "AE", flag: "🇦🇪", name: "UAE", dial: "+971", example: "501234567" },
-  { cc: "US", flag: "🇺🇸", name: "United States", dial: "+1", example: "4155551234" },
-];
 
 function toE164(dial, local) {
   const d = String(dial || "").replace(/[^\d+]/g, "");
@@ -91,17 +81,18 @@ function toE164(dial, local) {
   if (String(local || "").trim().startsWith("+")) {
     const just = String(local).replace(/[^\d+]/g, "");
     return just.startsWith("+") ? just : `+${just}`;
-  }
+    }
   const dialDigits = d.replace(/\D/g, "");
   if (!dialDigits || !digits) return "";
   return `+${dialDigits}${digits}`;
 }
-function guessDefaultCountry(local) {
-  const digits = String(local || "").replace(/\D/g, "");
-  if (digits.length === 10 && /^[6-9]/.test(digits)) {
-    return COUNTRIES.find((c) => c.cc === "IN") || COUNTRIES[0];
-  }
-  return COUNTRIES[0];
+
+function flagFromCC(cc) {
+  // Regional Indicator Symbols
+  if (!cc || cc.length !== 2) return "🏳️";
+  const A = 0x1f1e6;
+  const a = "A".charCodeAt(0);
+  return String.fromCodePoint(...cc.toUpperCase().split("").map(c => A + (c.charCodeAt(0) - a)));
 }
 
 /** =========================================================
@@ -109,6 +100,34 @@ function guessDefaultCountry(local) {
  * ======================================================== */
 export default function RegisterPage() {
   const router = useRouter();
+
+  // ---------- Countries (built at runtime) ----------
+  const [countries, setCountries] = useState([]);
+  const [country, setCountry] = useState(null);
+
+  useEffect(() => {
+    try {
+      const regionNames = new Intl.DisplayNames(["en"], { type: "region" });
+      const list = getCountries()
+        .map((cc) => {
+          let dial = "";
+          try { dial = `+${getCountryCallingCode(cc)}`; } catch { dial = ""; }
+          const name = regionNames.of(cc) || cc;
+          return { cc, name, dial, flag: flagFromCC(cc) };
+        })
+        .filter(c => c.dial) // keep only those with calling codes
+        .sort((a, b) => a.name.localeCompare(b.name));
+      setCountries(list);
+
+      // Default to India if present, else first in list
+      const def = list.find(c => c.cc === "IN") || list[0] || null;
+      setCountry(def);
+    } catch (e) {
+      console.error("Building country list failed:", e);
+      setCountries([]);
+      setCountry(null);
+    }
+  }, []);
 
   // ---------- Steps & Sponsor ----------
   const [step, setStep] = useState(1);
@@ -158,7 +177,6 @@ export default function RegisterPage() {
   const [email, setEmail] = useState("");
   const [emailTouched, setEmailTouched] = useState(false);
 
-  const [country, setCountry] = useState(COUNTRIES[0]);
   const [phoneLocal, setPhoneLocal] = useState("");
 
   const [panInput, setPanInput] = useState("");
@@ -169,12 +187,6 @@ export default function RegisterPage() {
 
   const [registering, setRegistering] = useState(false);
   const [notice, setNotice] = useState("");
-
-  // Bias India if phone looks like 10-digit local
-  useEffect(() => {
-    if (!phoneLocal) return;
-    setCountry((prev) => prev ?? guessDefaultCountry(phoneLocal));
-  }, [phoneLocal]);
 
   const emailValid = useMemo(() => isValidEmail(email), [email]);
   const pwScore = useMemo(() => passwordScore(password), [password]);
@@ -289,9 +301,7 @@ export default function RegisterPage() {
       const userCredential = await createUserWithEmailAndPassword(auth, emailNorm, password);
       createdAuthUser = userCredential.user;
       const uid = createdAuthUser.uid;
-      try {
-        await updateProfile(createdAuthUser, { displayName: nameNorm });
-      } catch {}
+      try { await updateProfile(createdAuthUser, { displayName: nameNorm }); } catch {}
 
       // Referral ID
       const referralId = await generateUniqueReferralId(uid);
@@ -306,7 +316,8 @@ export default function RegisterPage() {
         email: emailNorm,
         phone: e164,
         phoneRaw: rawPhone,
-        countryCode: country?.dial || "",
+        countryCode: country?.cc || "",
+        countryDial: country?.dial || "",
         pan: panNorm,
         referralId,
         upline: upline.id,
@@ -334,19 +345,12 @@ export default function RegisterPage() {
       setPassword("");
     } catch (err) {
       console.error("Registration error:", err);
-      try {
-        if (createdAuthUser?.delete) await createdAuthUser.delete();
-      } catch {}
+      try { if (createdAuthUser?.delete) await createdAuthUser.delete(); } catch {}
       setNotice(`❌ ${err?.message || "Registration failed. Try again."}`);
     } finally {
       setRegistering(false);
     }
   };
-
-  const phoneExample = useMemo(
-    () => (country ? `${country.dial} ${country.example}` : ""),
-    [country]
-  );
 
   /** =========================================================
    *  UI
@@ -477,17 +481,19 @@ export default function RegisterPage() {
                   )}
                 </div>
 
+                {/* Country + Phone */}
                 <div className="col-span-1 sm:col-span-2">
                   <div className="flex gap-2">
                     <select
-                      value={country?.cc}
-                      onChange={(e) =>
-                        setCountry(COUNTRIES.find((c) => c.cc === e.target.value) || COUNTRIES[0])
-                      }
-                      className="w-[46%] sm:w-52 rounded-2xl border border-gray-200 px-3 py-3 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      title="Country code"
+                      value={country?.cc || ""}
+                      onChange={(e) => {
+                        const next = countries.find(c => c.cc === e.target.value) || null;
+                        setCountry(next);
+                      }}
+                      className="w-[60%] sm:w-1/2 rounded-2xl border border-gray-200 px-3 py-3 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      title="Country / calling code"
                     >
-                      {COUNTRIES.map((c) => (
+                      {countries.map((c) => (
                         <option key={c.cc} value={c.cc}>
                           {c.flag} {c.name} ({c.dial})
                         </option>
@@ -497,20 +503,21 @@ export default function RegisterPage() {
                     <input
                       value={phoneLocal}
                       onChange={(e) => setPhoneLocal(e.target.value)}
-                      inputMode="numeric"
-                      placeholder={`Phone number (e.g. ${country.example})`}
+                      inputMode="tel"
+                      placeholder={`Phone number`}
                       className="flex-1 rounded-2xl border border-gray-200 px-3 py-3 text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
                     />
                   </div>
                   <p className="mt-2 text-xs text-gray-500">
                     We’ll save your number as{" "}
                     <span className="font-mono text-gray-700">
-                      {toE164(country?.dial, phoneLocal) || `${country.dial}…`}
+                      {toE164(country?.dial, phoneLocal) || `${country?.dial || "+"}…`}
                     </span>{" "}
                     (WhatsApp-ready).
                   </p>
                 </div>
 
+                {/* PAN */}
                 <div>
                   <input
                     value={panInput}
@@ -530,6 +537,7 @@ export default function RegisterPage() {
                   )}
                 </div>
 
+                {/* Password */}
                 <div>
                   <div className="relative">
                     <input
@@ -603,11 +611,7 @@ export default function RegisterPage() {
   function Rule({ ok, label }) {
     return (
       <div className="flex items-center gap-1">
-        <span
-          className={`inline-block h-2 w-2 rounded-full ${
-            ok ? "bg-green-600" : "bg-gray-300"
-          }`}
-        />
+        <span className={`inline-block h-2 w-2 rounded-full ${ok ? "bg-green-600" : "bg-gray-300"}`} />
         <span className={`${ok ? "text-gray-800" : ""}`}>{label}</span>
       </div>
     );
