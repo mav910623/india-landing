@@ -1,195 +1,303 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
-import { auth } from "@/lib/firebase";
+import { useEffect, useMemo, useRef, useState } from "react";
+import Image from "next/image";
+import Link from "next/link";
+import { onAuthStateChanged } from "firebase/auth";
+import { auth, db } from "@/lib/firebase";
+import { doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
 
-export const dynamic = "force-dynamic";
-export const fetchCache = "force-no-store";
+/** =========================================================
+ *  Simple content (kid-friendly)
+ * ======================================================== */
+const MODULES = [
+  {
+    id: "m1",
+    num: 1,
+    title: "Getting Started",
+    goal: "Make a small list and invite people nicely.",
+    steps: [
+      "Think happy. Be kind. Keep it simple.",
+      "Write 20 names you know. Friends and family are okay.",
+      "Invite: “I found something good. 15 minutes to see?”",
+    ],
+  },
+  {
+    id: "m2",
+    num: 2,
+    title: "Show the Chance & Products",
+    goal: "Explain what it is in a few minutes.",
+    steps: [
+      "Why now: India is starting. Good timing.",
+      "How to grow: Build → Duplicate → Multiply.",
+      "Share 2–3 hero products. Talk about results, not big words.",
+    ],
+  },
+  {
+    id: "m3",
+    num: 3,
+    title: "ABC: Connect People to Help",
+    goal: "A = a helpful thing, B = you connect, C = your friend.",
+    steps: [
+      "A = a meeting, an upline, or a short recording.",
+      "B = you say a few words to link them.",
+      "C = your friend. Book the next step within 24 hours.",
+    ],
+  },
+];
 
+/** Local storage key (per-user when we have uid) */
+const lsKey = (uid) => `nuvtg.learn.progress:${uid || "anon"}`;
+
+/** Small helpers */
+const clamp = (n, a, b) => Math.max(a, Math.min(b, n));
+
+/** =========================================================
+ *  Page
+ * ======================================================== */
 export default function SponsorTrainingPage() {
-  const router = useRouter();
-  const [ready, setReady] = useState(false);
+  const [uid, setUid] = useState(null);
+  const [progress, setProgress] = useState({}); // { m1: true/false, ... }
+  const [expanded, setExpanded] = useState(MODULES[0].id);
+  const [saving, setSaving] = useState(false);
 
+  const firstRender = useRef(true);
+  const saveTimer = useRef(null);
+
+  /** Capture current user for Firestore sync */
   useEffect(() => {
-    const unsub = auth.onAuthStateChanged((u) => {
-      if (!u) router.replace("/login");
-      else setReady(true);
+    const unsub = onAuthStateChanged(auth, async (u) => {
+      setUid(u?.uid || null);
     });
     return () => unsub();
-  }, [router]);
+  }, []);
 
-  if (!ready) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-white">
-        <p className="text-base text-gray-500">Loading…</p>
-      </div>
-    );
-  }
+  /** Load progress (local first, then Firestore if logged in) */
+  useEffect(() => {
+    // 1) local
+    try {
+      const raw = localStorage.getItem(lsKey(uid));
+      if (raw) {
+        const saved = JSON.parse(raw);
+        if (saved && typeof saved === "object") setProgress(saved);
+      }
+    } catch {}
+
+    // 2) firestore
+    (async () => {
+      if (!uid) return;
+      try {
+        const snap = await getDoc(doc(db, "users", uid));
+        const data = snap.data() || {};
+        const modules = data?.learn?.modules || {};
+        if (modules && typeof modules === "object") {
+          setProgress((prev) => ({ ...prev, ...modules })); // merge local + remote
+        }
+      } catch (e) {
+        console.warn("Learn progress fetch failed:", e);
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [uid]);
+
+  /** Persist on change: local immediately, Firestore debounced */
+  useEffect(() => {
+    // local
+    try {
+      localStorage.setItem(lsKey(uid), JSON.stringify(progress || {}));
+    } catch {}
+
+    // debounce remote
+    if (!uid) return; // not logged in => local only
+    if (firstRender.current) {
+      firstRender.current = false;
+      return;
+    }
+    if (saveTimer.current) clearTimeout(saveTimer.current);
+    saveTimer.current = setTimeout(async () => {
+      try {
+        setSaving(true);
+        await setDoc(
+          doc(db, "users", uid),
+          { learn: { modules: progress || {}, updatedAt: serverTimestamp() } },
+          { merge: true }
+        );
+      } catch (e) {
+        console.warn("Learn progress save failed:", e);
+      } finally {
+        setSaving(false);
+      }
+    }, 350);
+    return () => {
+      if (saveTimer.current) clearTimeout(saveTimer.current);
+    };
+  }, [progress, uid]);
+
+  const doneCount = useMemo(
+    () => MODULES.reduce((n, m) => n + (progress[m.id] ? 1 : 0), 0),
+    [progress]
+  );
+  const totalCount = MODULES.length;
+  const pct = clamp(Math.round((doneCount / totalCount) * 100), 0, 100);
+
+  const nextModule = useMemo(
+    () => MODULES.find((m) => !progress[m.id]),
+    [progress]
+  );
+
+  const toggleDone = (id) => {
+    setProgress((p) => ({ ...p, [id]: !p[id] }));
+  };
+
+  const openOnly = (id) => setExpanded(id);
 
   return (
-    <div className="min-h-screen bg-white">
-      {/* Top bar (kept simple to match app aesthetic) */}
-      <header className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-sm">
-        <div className="mx-auto max-w-4xl px-4 py-3 flex items-center justify-between">
-          <h1 className="text-lg sm:text-xl font-semibold tracking-tight">Sponsoring Training</h1>
-          <a
-            href="/dashboard"
-            className="rounded-md bg-white/15 px-3 py-1.5 text-sm hover:bg-white/25 transition"
-          >
-            Back
-          </a>
-        </div>
-      </header>
+    <div className="min-h-screen bg-gradient-to-b from-sky-50 via-white to-white">
+      {/* ornaments */}
+      <div className="pointer-events-none fixed inset-0 -z-10">
+        <div className="absolute -top-24 -left-16 h-72 w-72 rounded-full bg-blue-100/40 blur-3xl" />
+        <div className="absolute -bottom-16 -right-24 h-72 w-72 rounded-full bg-indigo-100/40 blur-3xl" />
+      </div>
 
-      <main className="mx-auto max-w-4xl px-4 py-6 sm:py-8">
-        {/* Hero / Intro */}
-        <section className="rounded-2xl border border-gray-100 bg-white shadow-sm p-4 sm:p-6">
-          <h2 className="text-xl font-extrabold text-gray-900 tracking-tight">
-            Learn how to sponsor — step by step
-          </h2>
-          <p className="mt-2 text-sm text-gray-700">
-            Master three simple modules: <strong>Getting Started</strong>,{" "}
-            <strong>Opportunity & Product Presentation</strong>, and{" "}
-            <strong>How to do ABC</strong>. Watch the video, follow the steps, and use the quick
-            checklists to take action today.
+      <div className="mx-auto max-w-3xl px-4 py-8 sm:py-10">
+        {/* Brand */}
+        <div className="mb-6 flex flex-col items-center text-center">
+          <div className="rounded-2xl ring-1 ring-gray-100 shadow-sm p-3 bg-white">
+            <Image
+              src="/nuvantage-icon.svg"
+              alt="NuVantage India"
+              width={88}
+              height={88}
+              priority
+              className="block"
+            />
+          </div>
+          <h1 className="mt-4 text-[22px] sm:text-3xl font-semibold tracking-tight text-gray-900">
+            Learn to Sponsor
+          </h1>
+          <p className="mt-1 text-sm text-gray-600">
+            Three small lessons. Easy steps. You can do this.
           </p>
-        </section>
+        </div>
+
+        {/* Top progress + actions */}
+        <div className="mb-6 flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+          <div className="inline-flex items-center gap-2 rounded-2xl border border-gray-200 bg-white px-3 py-2 text-sm text-gray-800 shadow-sm">
+            <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-blue-50 text-blue-700 text-xs font-semibold">
+              {doneCount}/{totalCount}
+            </span>
+            <span className="font-medium">{pct}% done</span>
+            {saving && <span className="text-xs text-gray-500">· saving…</span>}
+          </div>
+
+          <div className="flex-1" />
+
+          {nextModule && (
+            <button
+              onClick={() => openOnly(nextModule.id)}
+              className="rounded-2xl border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-700 hover:bg-blue-100 transition"
+              title="Go to the next lesson"
+            >
+              Resume lesson {nextModule.num}
+            </button>
+          )}
+
+          <Link
+            href="/dashboard"
+            className="rounded-2xl border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 transition"
+            title="Back to dashboard"
+          >
+            ← Back
+          </Link>
+        </div>
 
         {/* Modules */}
-        <div className="mt-6 grid gap-4">
-          <ModuleCard
-            index={1}
-            title="Getting Started"
-            subtitle="Mindset, building your name list, and inviting people out"
-            videoTitle="Getting Started — Full Walkthrough"
-            // Replace with your actual video URL when ready
-            videoSrc=""
-            poster=""
-            steps={[
-              "Adopt the India Founder mindset — you’re building leaders.",
-              "Write a 50–100 person name list (friends, family, colleagues, social).",
-              "Segment your list (A: most likely, B: likely, C: longshots).",
-              "Use simple invite scripts — book short, clear meetings.",
-              "Track outreach daily (5–10 quality invites).",
-            ]}
-            checklist={[
-              "Name list created (≥50)",
-              "3 invite scripts prepared (text/voice/WhatsApp)",
-              "First 10 invites sent",
-            ]}
-          />
+        <div className="space-y-3">
+          {MODULES.map((m) => {
+            const open = expanded === m.id;
+            const done = !!progress[m.id];
+            return (
+              <section
+                key={m.id}
+                className="rounded-3xl border border-gray-100/80 bg-white/80 backdrop-blur-sm p-4 sm:p-5 shadow-xl"
+              >
+                {/* Header */}
+                <button
+                  onClick={() => openOnly(m.id)}
+                  aria-expanded={open}
+                  className="w-full text-left flex items-center gap-3"
+                >
+                  <span
+                    className={`inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-xl text-sm font-bold ${
+                      done ? "bg-green-100 text-green-700" : "bg-blue-100 text-blue-700"
+                    }`}
+                  >
+                    {m.num}
+                  </span>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <h2 className="text-base sm:text-lg font-semibold text-gray-900">
+                        {m.title}
+                      </h2>
+                      {done && (
+                        <span className="text-[11px] rounded-full border border-green-200 bg-green-50 text-green-700 px-2 py-0.5">
+                          Done
+                        </span>
+                      )}
+                    </div>
+                    <p className="mt-0.5 text-sm text-gray-600">{m.goal}</p>
+                  </div>
+                  <span
+                    className={`ml-2 text-gray-500 transition-transform ${open ? "rotate-180" : ""}`}
+                    aria-hidden
+                  >
+                    ▼
+                  </span>
+                </button>
 
-          <ModuleCard
-            index={2}
-            title="Opportunity & Product Presentation"
-            subtitle="How to present the business and share product stories"
-            videoTitle="Opportunity & Product Basics"
-            videoSrc=""
-            poster=""
-            steps={[
-              "Open with your story (why India, why now).",
-              "Show the simple business model: Build → Duplicate → Multiply.",
-              "Highlight 2–3 flagship products with simple benefits.",
-              "Handle basics: time, tools, support, and next steps.",
-              "Close clearly: invite to register or book ABC with upline.",
-            ]}
-            checklist={[
-              "Personal 60–90s story practiced",
-              "2–3 product highlights ready",
-              "Closing questions scripted",
-            ]}
-          />
+                {/* Body */}
+                {open && (
+                  <div className="mt-4 pl-11">
+                    <ol className="list-decimal pl-5 space-y-2 text-sm text-gray-800">
+                      {m.steps.map((s, i) => (
+                        <li key={i}>{s}</li>
+                      ))}
+                    </ol>
 
-          <ModuleCard
-            index={3}
-            title="How to do ABC"
-            subtitle="Link people to value: A = Value Add, B = Bridge, C = Customer/Prospect"
-            videoTitle="ABC — Value Add, Bridge, Customer"
-            videoSrc=""
-            poster=""
-            steps={[
-              "A (Value Add): pick the right asset — live meeting, upline, short recording.",
-              "B (Bridge): edify the asset — why it helps your prospect.",
-              "C (Customer/Prospect): confirm time, send link, and set expectations.",
-              "After: confirm attendance, and schedule the follow-up.",
-              "Close with a clear decision or next step.",
-            ]}
-            checklist={[
-              "3 value-add options listed (meeting/upline/tools)",
-              "Bridge script written",
-              "Follow-up template ready",
-            ]}
-          />
+                    <div className="mt-4 flex items-center gap-2">
+                      <button
+                        onClick={() => toggleDone(m.id)}
+                        className={`rounded-2xl px-4 py-2 text-sm font-semibold transition shadow-sm border ${
+                          done
+                            ? "bg-green-600 text-white hover:bg-green-700 border-green-600"
+                            : "bg-blue-600 text-white hover:bg-blue-700 border-blue-600"
+                        }`}
+                      >
+                        {done ? "Mark as Not Done" : "Mark as Done"}
+                      </button>
+
+                      {!done && m.id === "m1" && (
+                        <Link
+                          href="/dashboard"
+                          className="rounded-2xl border border-gray-200 bg-white px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition"
+                          title="Copy your referral link on the dashboard"
+                        >
+                          Ready to invite? Go to Dashboard
+                        </Link>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </section>
+            );
+          })}
         </div>
-      </main>
+
+        {/* Tiny footer tip */}
+        <p className="mt-6 text-center text-xs text-gray-500">
+          Tip: small steps every day win the game.
+        </p>
+      </div>
     </div>
-  );
-}
-
-function ModuleCard({ index, title, subtitle, videoTitle, videoSrc, poster, steps, checklist }) {
-  return (
-    <section className="rounded-2xl border border-gray-100 bg-white shadow-sm p-4 sm:p-6">
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <div className="inline-flex items-center gap-2 text-xs font-semibold text-indigo-700 bg-indigo-50 border border-indigo-100 rounded-full px-2.5 py-1">
-            Module {index}
-          </div>
-          <h3 className="mt-2 text-lg font-semibold text-gray-900">{title}</h3>
-          {subtitle && <p className="mt-1 text-sm text-gray-600">{subtitle}</p>}
-        </div>
-      </div>
-
-      {/* Video */}
-      <div className="mt-3 rounded-xl overflow-hidden ring-1 ring-gray-100 bg-black/5">
-        <div className="px-3 pt-3 text-xs font-medium text-gray-700">{videoTitle}</div>
-        <div className="p-3">
-          <div className="aspect-video w-full rounded-lg overflow-hidden bg-black/80">
-            {/* Replace src with your hosted MP4 or HLS URL when available */}
-            <video controls playsInline poster={poster} className="w-full h-full">
-              {videoSrc ? (
-                <source src={videoSrc} type="video/mp4" />
-              ) : null}
-              {!videoSrc && (
-                <track kind="captions" srcLang="en" label="English" />
-              )}
-            </video>
-          </div>
-        </div>
-      </div>
-
-      {/* Steps */}
-      <div className="mt-4">
-        <h4 className="text-sm font-semibold text-gray-900">Step-by-step</h4>
-        <ol className="mt-2 list-decimal pl-5 space-y-1.5 text-sm text-gray-700">
-          {steps.map((s, i) => (
-            <li key={i}>{s}</li>
-          ))}
-        </ol>
-      </div>
-
-      {/* Checklist */}
-      <div className="mt-4">
-        <h4 className="text-sm font-semibold text-gray-900">Quick checklist</h4>
-        <ul className="mt-2 space-y-1.5 text-sm text-gray-700">
-          {checklist.map((c, i) => (
-            <li key={i} className="flex items-center gap-2">
-              <span className="inline-block h-2.5 w-2.5 rounded-full bg-emerald-500" />
-              <span>{c}</span>
-            </li>
-          ))}
-        </ul>
-      </div>
-
-      {/* CTA row */}
-      <div className="mt-4 flex flex-wrap items-center gap-2">
-        <a
-          href="/dashboard"
-          className="inline-flex items-center gap-2 rounded-xl bg-blue-600 text-white px-3 py-2 text-xs font-semibold hover:bg-blue-700 active:scale-[0.99] shadow-sm"
-        >
-          Back to dashboard
-        </a>
-      </div>
-    </section>
   );
 }
