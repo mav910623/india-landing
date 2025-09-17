@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { auth, db } from "@/lib/firebase";
@@ -94,6 +94,89 @@ function flagFromCC(cc) {
   const A = 0x1f1e6;
   const a = "A".charCodeAt(0);
   return String.fromCodePoint(...cc.toUpperCase().split("").map((c) => A + (c.charCodeAt(0) - a)));
+}
+
+/** =========================================================
+ *  Small, accessible custom picker for phone country
+ *  - List shows: FLAG + Country name
+ *  - Collapsed trigger shows: FLAG + dial code (compact)
+ * ======================================================== */
+function PhoneCountryPicker({ countries, value, onChange }) {
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef(null);
+
+  useEffect(() => {
+    function onDocClick(e) {
+      if (!rootRef.current) return;
+      if (!rootRef.current.contains(e.target)) setOpen(false);
+    }
+    function onEsc(e) {
+      if (e.key === "Escape") setOpen(false);
+    }
+    document.addEventListener("click", onDocClick);
+    document.addEventListener("keydown", onEsc);
+    return () => {
+      document.removeEventListener("click", onDocClick);
+      document.removeEventListener("keydown", onEsc);
+    };
+  }, []);
+
+  const current = value || null;
+
+  return (
+    <div ref={rootRef} className="relative">
+      {/* Trigger */}
+      <button
+        type="button"
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        onClick={() => setOpen((v) => !v)}
+        className="inline-flex items-center gap-2 rounded-2xl border border-gray-200 bg-white px-3 py-3 text-sm text-gray-900 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
+        title="Change country code"
+      >
+        <span className="text-base leading-none">{current?.flag || "🌍"}</span>
+        <span className="font-mono text-gray-800">{current?.dial || "+.."}</span>
+        <svg
+          aria-hidden="true"
+          className={`h-4 w-4 text-gray-500 transition-transform ${open ? "rotate-180" : ""}`}
+          viewBox="0 0 20 20"
+          fill="currentColor"
+        >
+          <path d="M5.23 7.21a.75.75 0 011.06.02L10 10.585l3.71-3.355a.75.75 0 011.02 1.1l-4.2 3.8a.75.75 0 01-1.02 0l-4.2-3.8a.75.75 0 01-.02-1.06z" />
+        </svg>
+      </button>
+
+      {/* Listbox */}
+      {open && (
+        <div
+          role="listbox"
+          className="absolute z-50 mt-2 w-64 max-h-64 overflow-auto rounded-2xl border border-gray-200 bg-white p-1 shadow-lg"
+        >
+          {countries.map((c) => {
+            const selected = current?.cc === c.cc;
+            return (
+              <button
+                key={c.cc}
+                type="button"
+                role="option"
+                aria-selected={selected}
+                onClick={() => {
+                  onChange?.(c);
+                  setOpen(false);
+                }}
+                className={`w-full text-left rounded-xl px-2 py-2 text-sm hover:bg-gray-50 ${
+                  selected ? "bg-blue-50" : ""
+                }`}
+              >
+                <span className="mr-2">{c.flag}</span>
+                <span className="align-middle">{c.name}</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
 }
 
 /** =========================================================
@@ -361,13 +444,11 @@ export default function RegisterPage() {
       if (isInternational) {
         payload["pan"] = null;
         payload["residenceCountryCC"] = residence?.cc || "";
-        payload["residenceCountryDial"] = residence?.dial || "";
         payload["residenceCountryName"] = residence?.name || "";
         payload["nuskinId"] = nuskinId.trim();
       } else {
         payload["pan"] = panNorm;
         payload["residenceCountryCC"] = "IN";
-        payload["residenceCountryDial"] = "+91";
         payload["residenceCountryName"] = "India";
         payload["nuskinId"] = "";
       }
@@ -410,7 +491,7 @@ export default function RegisterPage() {
    * ======================================================== */
   return (
     <div className="min-h-screen bg-gradient-to-b from-sky-50 via-white to-white">
-      {/* Subtle ornaments */}
+      {/* Ornaments */}
       <div className="pointer-events-none fixed inset-0 -z-10">
         <div className="absolute -top-24 -left-16 h-72 w-72 rounded-full bg-blue-100/40 blur-3xl" />
         <div className="absolute -bottom-16 -right-24 h-72 w-72 rounded-full bg-indigo-100/40 blur-3xl" />
@@ -432,9 +513,7 @@ export default function RegisterPage() {
           <h1 className="mt-4 text-[22px] sm:text-3xl font-semibold tracking-tight text-gray-900">
             India Pre-Registration
           </h1>
-          <p className="mt-1 text-sm text-gray-600">
-            Verify your sponsor and complete your details.
-          </p>
+          <p className="mt-1 text-sm text-gray-600">Verify your sponsor and complete your details.</p>
         </div>
 
         <div className="rounded-3xl border border-gray-100/80 bg-white/80 backdrop-blur-sm p-6 sm:p-7 shadow-xl">
@@ -510,9 +589,7 @@ export default function RegisterPage() {
                 </div>
               </div>
 
-              <label className="block text-sm font-medium text-gray-800 mb-3">
-                Step 2 — Your details
-              </label>
+              <label className="block text-sm font-medium text-gray-800 mb-3">Step 2 — Your details</label>
 
               {/* Participant Type */}
               <div className="mb-3 grid grid-cols-1 sm:grid-cols-3 gap-2">
@@ -534,8 +611,8 @@ export default function RegisterPage() {
               {/* Reminder for international */}
               {isInternational && (
                 <div className="mb-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-[13px] text-amber-900">
-                  Reminder: You have to be paid as a <strong>Brand Representative</strong> in your country of registration
-                  to participate in the India launch.
+                  Reminder: You have to be paid as a <strong>Brand Representative</strong> in your country of
+                  registration to participate in the India launch.
                 </div>
               )}
 
@@ -565,25 +642,14 @@ export default function RegisterPage() {
                   )}
                 </div>
 
-                {/* Country (phone) + Phone */}
+                {/* Country code (compact) + Phone */}
                 <div className="col-span-1 sm:col-span-2">
-                  <div className="flex gap-2">
-                    <select
-                      value={country?.cc || ""}
-                      onChange={(e) => {
-                        const next = countries.find((c) => c.cc === e.target.value) || null;
-                        setCountry(next);
-                      }}
-                      className="w-[60%] sm:w-1/2 rounded-2xl border border-gray-200 px-3 py-3 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      title="Country / calling code"
-                    >
-                      {countries.map((c) => (
-                        <option key={c.cc} value={c.cc}>
-                          {c.flag} {c.name} ({c.dial})
-                        </option>
-                      ))}
-                    </select>
-
+                  <div className="flex gap-2 items-stretch">
+                    <PhoneCountryPicker
+                      countries={countries}
+                      value={country}
+                      onChange={(c) => setCountry(c)}
+                    />
                     <input
                       value={phoneLocal}
                       onChange={(e) => setPhoneLocal(e.target.value)}
@@ -605,9 +671,7 @@ export default function RegisterPage() {
                 {isInternational && (
                   <>
                     <div>
-                      <label className="block text-xs font-medium text-gray-700 mb-1">
-                        Country of residence
-                      </label>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">Country of residence</label>
                       <select
                         value={residence?.cc || ""}
                         onChange={(e) => {
@@ -618,16 +682,14 @@ export default function RegisterPage() {
                       >
                         {countries.map((c) => (
                           <option key={c.cc} value={c.cc}>
-                            {c.flag} {c.name} ({c.dial})
+                            {c.flag} {c.name}
                           </option>
                         ))}
                       </select>
                     </div>
 
                     <div>
-                      <label className="block text-xs font-medium text-gray-700 mb-1">
-                        Nu Skin ID
-                      </label>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">Nu Skin ID</label>
                       <input
                         value={nuskinId}
                         onChange={(e) => setNuskinId(e.target.value)}
