@@ -293,7 +293,10 @@ export default function DashboardPage() {
   }
 
   /** Mission 2: number of L1 with ≥10 */
-  const l1Children = childrenCache[currentUid] || [];
+  const l1Children = useMemo(
+    () => (childrenCache[currentUid] || []),
+    [childrenCache, currentUid]
+  );
   const completedL1 = useMemo(() => {
     let c = 0;
     for (const kid of l1Children) {
@@ -383,15 +386,35 @@ export default function DashboardPage() {
 
   /** ===== UI ===== */
   return (
-    <div className="min-h-screen bg-white pb-24">
-      {/* Header */}
-      <header className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-sm">
+    <div className="min-h-screen bg-gradient-to-b from-sky-50 via-white to-white pb-24">
+      {/* Soft ornaments (match register/login) */}
+      <div className="pointer-events-none fixed inset-0 -z-10">
+        <div className="absolute -top-24 -left-16 h-72 w-72 rounded-full bg-blue-100/40 blur-3xl" />
+        <div className="absolute -bottom-16 -right-24 h-72 w-72 rounded-full bg-indigo-100/40 blur-3xl" />
+      </div>
+
+      {/* Header — brand + actions */}
+      <header className="sticky top-0 z-30 bg-white/70 backdrop-blur supports-[backdrop-filter]:bg-white/60 border-b border-gray-100">
         <div className="mx-auto max-w-4xl px-4 py-3 flex items-center justify-between">
-          <h1 className="text-lg sm:text-xl font-semibold tracking-tight">Team Dashboard</h1>
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="rounded-2xl ring-1 ring-gray-100 shadow-sm p-2 bg-white shrink-0">
+              <Image
+                src="/nuvantage-icon.svg"
+                alt="NuVantage India"
+                width={40}
+                height={40}
+                priority
+                className="block"
+              />
+            </div>
+            <h1 className="text-[17px] sm:text-xl font-semibold tracking-tight text-gray-900 truncate">
+              Team Dashboard
+            </h1>
+          </div>
           <div className="flex items-center gap-2">
             <button
               onClick={() => setShowHelp(true)}
-              className="rounded-md bg-white/15 px-3 py-1.5 text-sm hover:bg-white/25 transition"
+              className="rounded-2xl border border-gray-200 bg-white px-3 py-1.5 text-sm text-gray-800 hover:bg-gray-50 transition"
               title="How it works"
             >
               Help
@@ -401,7 +424,7 @@ export default function DashboardPage() {
                 await signOut(auth);
                 router.push("/login");
               }}
-              className="rounded-md bg-white/15 px-3 py-1.5 text-sm hover:bg-white/25 transition"
+              className="rounded-2xl bg-blue-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-blue-700 transition"
               title="Log out"
             >
               Logout
@@ -412,7 +435,7 @@ export default function DashboardPage() {
 
       <main className="mx-auto max-w-4xl px-4 py-6 sm:py-8">
         {/* ===== Hero ===== */}
-        <section className="rounded-2xl border border-gray-100 bg-white shadow-sm p-4 sm:p-6">
+        <section className="rounded-3xl border border-gray-100/80 bg-white/80 backdrop-blur-sm shadow-xl p-4 sm:p-6">
           <div className="flex items-center justify-between gap-3">
             <div className="min-w-0">
               <p className="text-sm text-gray-600">{greeting()},</p>
@@ -498,7 +521,6 @@ export default function DashboardPage() {
               pct={Math.min(100, Math.round(((counts.levels?.["1"] || 0) / L1_GOAL) * 100))}
             />
 
-            {/* When collapsed, only show unlocked ones. When expanded, show all with locks where needed. */}
             {(showAllMissions || ((counts.levels?.["1"] || 0) >= L1_GOAL)) && (
               <MissionWide
                 title="Mission 2: Duplicate"
@@ -540,7 +562,7 @@ export default function DashboardPage() {
         {/* ===== Team ===== */}
         <section
           id="teamSection"
-          className="mt-8 rounded-2xl border border-gray-100 bg-white shadow-sm p-4 sm:p-6"
+          className="mt-8 rounded-3xl border border-gray-100/80 bg-white/80 backdrop-blur-sm shadow-xl p-4 sm:p-6"
         >
           <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-3">
@@ -628,11 +650,11 @@ export default function DashboardPage() {
       </main>
 
       {/* Sticky bottom action bar */}
-      <div className="fixed bottom-0 inset-x-0 z-40 border-t border-gray-200 bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/80">
+      <div className="fixed bottom-0 inset-x-0 z-40 border-t border-gray-200 bg-white/90 backdrop-blur supports-[backdrop-filter]:bg-white/75">
         <div className="mx-auto max-w-4xl px-4 py-2.5 grid grid-cols-2 gap-2">
           <button
             onClick={handleCopy}
-            className="rounded-xl bg-blue-600 text-white px-3 py-2 text-sm font-medium hover:bg-blue-700 shadow-sm"
+            className="rounded-2xl bg-blue-600 text-white px-3 py-2.5 text-sm font-semibold hover:bg-blue-700 shadow-sm"
             title="Copy your referral link"
           >
             Copy Invite Link
@@ -644,7 +666,7 @@ export default function DashboardPage() {
             )}`}
             target="_blank"
             rel="noopener noreferrer"
-            className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700 hover:bg-emerald-100 text-center font-medium shadow-sm"
+            className="rounded-2xl border border-emerald-200 bg-emerald-50 px-3 py-2.5 text-sm text-emerald-700 hover:bg-emerald-100 text-center font-semibold shadow-sm"
             title="Share on WhatsApp"
           >
             Share on Whatsapp
@@ -794,7 +816,10 @@ function TreeChildren({
   l1Progress,
   fetchL1Progress,
 }) {
-  const kids = childrenCache[parentId] || [];
+  const kids = useMemo(
+    () => (childrenCache[parentId] || []),
+    [childrenCache, parentId]
+  );
   const manyRows = kids.length > VIRTUALIZE_THRESHOLD;
 
   const parentRef = useRef(null);
