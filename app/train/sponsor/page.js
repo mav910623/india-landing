@@ -83,6 +83,44 @@ async function setSponsorProgress(uid, key, nextPartial) {
   });
 }
 
+/* ----------------------------- UI helpers ----------------------------- */
+
+function DoneButton({ done, onToggle, label = "Mark as done" }) {
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      aria-pressed={!!done}
+      className={`inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-medium shadow-sm border transition
+      ${done
+          ? "bg-emerald-600 text-white border-emerald-600 hover:bg-emerald-700"
+          : "bg-white text-gray-800 border-gray-200 hover:bg-gray-50"
+        }`}
+      title={done ? "Marked as done" : "Mark this module as done"}
+    >
+      {done ? (
+        <svg width="18" height="18" viewBox="0 0 24 24" className="shrink-0">
+          <path fill="currentColor" d="M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4z" />
+        </svg>
+      ) : (
+        <svg width="18" height="18" viewBox="0 0 24 24" className="shrink-0 text-gray-500">
+          <path fill="currentColor" d="M19 3H5c-1.1 0-2 .9-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V5c0-1.1-.9-2-2-2Zm0 16H5V5h14v14Z" />
+        </svg>
+      )}
+      <span>{done ? "Done" : label}</span>
+    </button>
+  );
+}
+
+function MiniCheck({ children }) {
+  return (
+    <li className="flex items-start gap-2">
+      <span className="mt-0.5 inline-block h-4 w-4 rounded-full bg-blue-600 text-white grid place-items-center text-[10px]">✓</span>
+      <span>{children}</span>
+    </li>
+  );
+}
+
 /* --------------------------------- Page --------------------------------- */
 
 export default function SponsorTrainingPage() {
@@ -145,7 +183,6 @@ export default function SponsorTrainingPage() {
     } catch (e) {
       console.error(e);
       setErrMsg("Saving failed. You can retry in a moment.");
-      // Soft rollback (optional): re-fetch baseline
       try {
         const seeded = await ensureTrainingDoc(uid);
         setProgress(normalizeProgress(seeded?.training?.sponsor));
@@ -178,7 +215,7 @@ export default function SponsorTrainingPage() {
             Learn How to Sponsor
           </h1>
           <p className="mt-1 text-sm text-gray-600">
-            Hey {displayName}! Follow these 3 easy modules. Keep it simple, keep it fun.
+            Hi {displayName}! Follow these 3 simple modules. Keep it short, friendly, and consistent.
           </p>
 
           {/* Progress pill */}
@@ -203,18 +240,16 @@ export default function SponsorTrainingPage() {
                   1) Getting Started
                 </h2>
                 <p className="mt-1 text-sm text-gray-600">
-                  Watch this, then do the tiny steps below.
+                  Watch this first, then do the small steps below.
                 </p>
               </div>
-              <label className="inline-flex items-center gap-2 text-sm text-gray-700">
-                <input
-                  type="checkbox"
-                  className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                  checked={!!progress.gettingStarted?.done}
-                  onChange={(e) => mark("gettingStarted", { done: e.target.checked })}
-                />
-                Mark done
-              </label>
+              <DoneButton
+                done={!!progress.gettingStarted?.done}
+                onToggle={() =>
+                  mark("gettingStarted", { done: !progress.gettingStarted?.done })
+                }
+                label="Mark as done"
+              />
             </div>
 
             {/* Video */}
@@ -229,40 +264,48 @@ export default function SponsorTrainingPage() {
               />
             </div>
 
-            {/* Super-simple, kid-friendly steps */}
-            <div className="mt-4 grid gap-3 sm:grid-cols-2">
+            {/* Clean, simple guidance */}
+            <div className="mt-4 grid gap-3 sm:grid-cols-3">
               <div className="rounded-xl border border-blue-100 bg-blue-50/60 p-3">
-                <h3 className="text-sm font-semibold text-blue-900">Big idea (kid-friendly)</h3>
-                <ul className="mt-2 list-disc pl-5 text-sm text-blue-900 space-y-1.5">
-                  <li>Use the products yourself. Be your own proof.</li>
-                  <li>Write a small list of friends. Don’t guess who will say “yes”.</li>
-                  <li>Invite kindly. Share, don’t push.</li>
-                  <li>“Not now” is okay. Keep going.</li>
+                <h3 className="text-sm font-semibold text-blue-900">Know this</h3>
+                <ul className="mt-2 text-sm text-blue-900 space-y-1.5">
+                  <MiniCheck>Use the products yourself. Your story matters.</MiniCheck>
+                  <MiniCheck>Write a small name list. Don’t pre-judge.</MiniCheck>
+                  <MiniCheck>Invite with care. Share, don’t push.</MiniCheck>
+                  <MiniCheck>“Not now” is okay. Keep moving.</MiniCheck>
                 </ul>
               </div>
 
               <div className="rounded-xl border border-emerald-100 bg-emerald-50/60 p-3">
-                <h3 className="text-sm font-semibold text-emerald-900">Do these 5 tiny steps</h3>
+                <h3 className="text-sm font-semibold text-emerald-900">Do this now</h3>
                 <ol className="mt-2 list-decimal pl-5 text-sm text-emerald-900 space-y-1.5">
-                  <li>Pick your starter products and use them.</li>
+                  <li>Pick and start using 1–2 products.</li>
                   <li>Write your <strong>Top 20</strong> names.</li>
-                  <li>Circle 3 names and message them today.</li>
-                  <li>Set a quick goal: become a <strong>Brand Representative</strong>.</li>
-                  <li>Book your next training / event with your upline.</li>
+                  <li>Message 3 people today to say hello and share interest.</li>
+                  <li>Set a first goal: become a <strong>Brand Representative</strong>.</li>
+                  <li>Book a class/event with your upline.</li>
                 </ol>
+              </div>
+
+              <div className="rounded-xl border border-violet-100 bg-violet-50/60 p-3">
+                <h3 className="text-sm font-semibold text-violet-900">Try this message</h3>
+                <p className="mt-2 text-sm text-violet-900">
+                  “Hey! I’ve started something simple that helps people look/feel great. Could I share a
+                  10-minute idea and two products I like? If it’s not for you, no worries.”
+                </p>
               </div>
             </div>
 
             <details className="mt-3 rounded-xl border border-gray-100 bg-gray-50 p-3 text-sm text-gray-700">
               <summary className="cursor-pointer select-none font-semibold">
-                Why these steps work
+                Why it works
               </summary>
               <ul className="mt-2 list-disc pl-5 space-y-1.5">
-                <li>Products first → you have a real story.</li>
-                <li>Name list → invite more, worry less.</li>
-                <li>3 reach-outs/day → tiny wins every day.</li>
+                <li>Products first → you speak from experience.</li>
+                <li>Name list → more invites, less guessing.</li>
+                <li>3 reach-outs/day → tiny wins add up fast.</li>
                 <li>Brand Rep goal → a clear first finish line.</li>
-                <li>Events & classes → faster skills, stronger belief.</li>
+                <li>Events/classes → fast skill growth with support.</li>
               </ul>
             </details>
           </section>
@@ -275,30 +318,28 @@ export default function SponsorTrainingPage() {
                   2) Opportunity & Product Presentation
                 </h2>
                 <p className="mt-1 text-sm text-gray-600">
-                  Show the plan + 1–2 hero products. Keep it short and friendly.
+                  Share the plan + 1–2 hero products. Keep it short and friendly.
                 </p>
               </div>
-              <label className="inline-flex items-center gap-2 text-sm text-gray-700">
-                <input
-                  type="checkbox"
-                  className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                  checked={!!progress.oppPresentation?.done}
-                  onChange={(e) => mark("oppPresentation", { done: e.target.checked })}
-                />
-                Mark done
-              </label>
+              <DoneButton
+                done={!!progress.oppPresentation?.done}
+                onToggle={() =>
+                  mark("oppPresentation", { done: !progress.oppPresentation?.done })
+                }
+                label="Mark as done"
+              />
             </div>
 
             <div className="mt-3 grid gap-3 sm:grid-cols-2 text-sm text-gray-700">
               <div className="rounded-xl border border-gray-100 bg-gray-50 p-3">
-                <h3 className="font-semibold">Say this (simple script)</h3>
+                <h3 className="font-semibold">Simple script</h3>
                 <p className="mt-1">
                   “I’m working on something that helps people look and feel great.
-                  Can I show you a quick 10-minute idea and 2 products I like?”
+                  Can I show you a quick 10-minute idea and two products I like?”
                 </p>
               </div>
               <div className="rounded-xl border border-gray-100 bg-gray-50 p-3">
-                <h3 className="font-semibold">Your mini deck</h3>
+                <h3 className="font-semibold">Mini deck outline</h3>
                 <ul className="mt-1 list-disc pl-5 space-y-1">
                   <li>Why now (health/beauty/opportunity)</li>
                   <li>Your story + product results</li>
@@ -320,15 +361,11 @@ export default function SponsorTrainingPage() {
                   Your job: connect C to A.
                 </p>
               </div>
-              <label className="inline-flex items-center gap-2 text-sm text-gray-700">
-                <input
-                  type="checkbox"
-                  className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                  checked={!!progress.abc?.done}
-                  onChange={(e) => mark("abc", { done: e.target.checked })}
-                />
-                Mark done
-              </label>
+              <DoneButton
+                done={!!progress.abc?.done}
+                onToggle={() => mark("abc", { done: !progress.abc?.done })}
+                label="Mark as done"
+              />
             </div>
 
             <div className="mt-3 grid gap-3 sm:grid-cols-2 text-sm text-gray-700">
@@ -342,9 +379,9 @@ export default function SponsorTrainingPage() {
               <div className="rounded-xl border border-gray-100 bg-gray-50 p-3">
                 <h3 className="font-semibold">Best practices</h3>
                 <ul className="mt-1 list-disc pl-5 space-y-1">
-                  <li>Set time & purpose clearly.</li>
-                  <li>Hype the value of A (why it helps).</li>
-                  <li>Stay in the chat; learn how your mentor answers.</li>
+                  <li>Set time and purpose clearly.</li>
+                  <li>Explain why the mentor or tool will help.</li>
+                  <li>Stay in the chat; learn from the answers.</li>
                 </ul>
               </div>
             </div>
