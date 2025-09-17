@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { auth, db } from "@/lib/firebase";
+import { onAuthStateChanged } from "firebase/auth";
 import {
   doc,
   getDoc,
@@ -16,101 +17,101 @@ import {
 export const dynamic = "force-dynamic";
 export const fetchCache = "force-no-store";
 
-/** --------------------------
- *  Firestore helpers
- * ------------------------- */
+/* --------------------------- Firestore helpers --------------------------- */
+
+const EMPTY_PROGRESS = {
+  gettingStarted: { watched: false, done: false },
+  oppPresentation: { done: false },
+  abc: { done: false },
+};
+
+function normalizeProgress(sponsor) {
+  return {
+    gettingStarted: {
+      watched: false,
+      done: false,
+      ...(sponsor?.gettingStarted || {}),
+    },
+    oppPresentation: {
+      done: false,
+      ...(sponsor?.oppPresentation || {}),
+    },
+    abc: {
+      done: false,
+      ...(sponsor?.abc || {}),
+    },
+  };
+}
+
 async function ensureTrainingDoc(uid) {
   const ref = doc(db, "users", uid);
   const snap = await getDoc(ref);
-  // If user doc doesn't exist yet (edge case), create a minimal one
+
   if (!snap.exists()) {
     await setDoc(ref, {
       uid,
       createdAt: serverTimestamp(),
       training: {
-        sponsor: {
-          gettingStarted: { watched: false, done: false },
-          oppPresentation: { done: false },
-          abc: { done: false },
-          updatedAt: serverTimestamp(),
-        },
+        sponsor: { ...EMPTY_PROGRESS, updatedAt: serverTimestamp() },
       },
     });
-    return {
-      training: {
-        sponsor: {
-          gettingStarted: { watched: false, done: false },
-          oppPresentation: { done: false },
-          abc: { done: false },
-        },
-      },
-    };
+    return { training: { sponsor: { ...EMPTY_PROGRESS } } };
   }
 
   const data = snap.data() || {};
-  const training = data.training || {};
-  const sponsor = training.sponsor || {};
-  // Seed missing fields (forward compatible)
-  const merged = {
-    gettingStarted: { watched: false, done: false, ...(sponsor.gettingStarted || {}) },
-    oppPresentation: { done: false, ...(sponsor.oppPresentation || {}) },
-    abc: { done: false, ...(sponsor.abc || {}) },
-  };
+  const merged = normalizeProgress(data?.training?.sponsor);
 
-  // If something was missing, persist the merge
+  // If anything was missing, persist the merge
   if (
-    !sponsor.gettingStarted ||
-    sponsor.oppPresentation === undefined ||
-    sponsor.abc === undefined
+    !data?.training?.sponsor?.gettingStarted ||
+    data?.training?.sponsor?.oppPresentation === undefined ||
+    data?.training?.sponsor?.abc === undefined
   ) {
     await updateDoc(ref, {
-      "training.sponsor": {
-        ...merged,
-        updatedAt: serverTimestamp(),
-      },
+      "training.sponsor": { ...merged, updatedAt: serverTimestamp() },
     });
   }
 
   return { training: { sponsor: merged } };
 }
 
-async function setSponsorProgress(uid, path, value) {
+async function setSponsorProgress(uid, key, nextPartial) {
   const ref = doc(db, "users", uid);
   await updateDoc(ref, {
-    [`training.sponsor.${path}`]: value,
+    [`training.sponsor.${key}`]: nextPartial,
     "training.sponsor.updatedAt": serverTimestamp(),
   });
 }
 
-/** --------------------------
- *  Page
- * ------------------------- */
+/* --------------------------------- Page --------------------------------- */
+
 export default function SponsorTrainingPage() {
   const router = useRouter();
   const [uid, setUid] = useState(null);
-  const [displayName, setDisplayName] = useState("");
+  const [displayName, setDisplayName] = useState("India Founder");
   const [loading, setLoading] = useState(true);
-
-  const [progress, setProgress] = useState({
-    gettingStarted: { watched: false, done: false },
-    oppPresentation: { done: false },
-    abc: { done: false },
-  });
+  const [progress, setProgress] = useState(EMPTY_PROGRESS);
+  const [errMsg, setErrMsg] = useState("");
 
   useEffect(() => {
-    const unsub = auth.onAuthStateChanged(async (user) => {
+    const unsub = onAuthStateChanged(auth, async (user) => {
       if (!user) {
         router.push("/login");
         return;
       }
       setUid(user.uid);
       setDisplayName(user.displayName || "India Founder");
-      const seeded = await ensureTrainingDoc(user.uid);
-      setProgress(seeded?.training?.sponsor || progress);
-      setLoading(false);
+      try {
+        const seeded = await ensureTrainingDoc(user.uid);
+        setProgress(normalizeProgress(seeded?.training?.sponsor));
+      } catch (e) {
+        console.error(e);
+        setErrMsg("Couldn’t load your training progress. Please refresh.");
+      } finally {
+        setLoading(false);
+      }
     });
     return () => unsub();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [router]);
 
   const pct = useMemo(() => {
@@ -130,12 +131,26 @@ export default function SponsorTrainingPage() {
     );
   }
 
-  /** UI helpers */
-  const mark = async (key, value) => {
+  /** Optimistic state update + Firestore write */
+  const mark = async (key, partial) => {
     if (!uid) return;
-    const next = { ...progress, [key]: { ...(progress[key] || {}), ...value } };
+    setErrMsg("");
+    const next = {
+      ...progress,
+      [key]: { ...(progress[key] || {}), ...partial },
+    };
     setProgress(next); // optimistic
-    await setSponsorProgress(uid, key, next[key]);
+    try {
+      await setSponsorProgress(uid, key, next[key]);
+    } catch (e) {
+      console.error(e);
+      setErrMsg("Saving failed. You can retry in a moment.");
+      // Soft rollback (optional): re-fetch baseline
+      try {
+        const seeded = await ensureTrainingDoc(uid);
+        setProgress(normalizeProgress(seeded?.training?.sponsor));
+      } catch {}
+    }
   };
 
   return (
@@ -163,13 +178,19 @@ export default function SponsorTrainingPage() {
             Learn How to Sponsor
           </h1>
           <p className="mt-1 text-sm text-gray-600">
-            Hey {displayName}! Follow these 3 simple modules. Keep it easy, keep it fun.
+            Hey {displayName}! Follow these 3 easy modules. Keep it simple, keep it fun.
           </p>
 
           {/* Progress pill */}
           <div className="mt-3 inline-flex items-center gap-2 rounded-full border border-gray-200 bg-white px-3 py-1.5 text-xs text-gray-700 shadow-sm">
             <span className="font-semibold">{pct}%</span> complete
           </div>
+
+          {errMsg && (
+            <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+              {errMsg}
+            </div>
+          )}
         </div>
 
         {/* Card */}
@@ -182,7 +203,7 @@ export default function SponsorTrainingPage() {
                   1) Getting Started
                 </h2>
                 <p className="mt-1 text-sm text-gray-600">
-                  Watch this. Then do the tiny steps below. Simple.
+                  Watch this, then do the tiny steps below.
                 </p>
               </div>
               <label className="inline-flex items-center gap-2 text-sm text-gray-700">
@@ -208,7 +229,7 @@ export default function SponsorTrainingPage() {
               />
             </div>
 
-            {/* Super-simple summary */}
+            {/* Super-simple, kid-friendly steps */}
             <div className="mt-4 grid gap-3 sm:grid-cols-2">
               <div className="rounded-xl border border-blue-100 bg-blue-50/60 p-3">
                 <h3 className="text-sm font-semibold text-blue-900">Big idea (kid-friendly)</h3>
@@ -216,22 +237,18 @@ export default function SponsorTrainingPage() {
                   <li>Use the products yourself. Be your own proof.</li>
                   <li>Write a small list of friends. Don’t guess who will say “yes”.</li>
                   <li>Invite kindly. Share, don’t push.</li>
-                  <li>It’s okay if someone says “not now”. Keep going.</li>
+                  <li>“Not now” is okay. Keep going.</li>
                 </ul>
-                {/* Transcript citation (required) */}
-                <p className="sr-only">
-                  Source: training talk transcript. :contentReference[oaicite:0]{index=0}
-                </p>
               </div>
 
               <div className="rounded-xl border border-emerald-100 bg-emerald-50/60 p-3">
                 <h3 className="text-sm font-semibold text-emerald-900">Do these 5 tiny steps</h3>
                 <ol className="mt-2 list-decimal pl-5 text-sm text-emerald-900 space-y-1.5">
                   <li>Pick your starter products and use them.</li>
-                  <li>Write your <strong>Top 20</strong> names (family, friends, coworkers, neighbors).</li>
+                  <li>Write your <strong>Top 20</strong> names.</li>
                   <li>Circle 3 names and message them today.</li>
                   <li>Set a quick goal: become a <strong>Brand Representative</strong>.</li>
-                  <li>Book your next training / big event with your upline.</li>
+                  <li>Book your next training / event with your upline.</li>
                 </ol>
               </div>
             </div>
@@ -241,10 +258,10 @@ export default function SponsorTrainingPage() {
                 Why these steps work
               </summary>
               <ul className="mt-2 list-disc pl-5 space-y-1.5">
-                <li>Products first → you have a real story to share.</li>
-                <li>Name list stops guessing → you invite more, worry less.</li>
-                <li>3 reach-outs a day → tiny daily wins beat big bursts.</li>
-                <li>Brand Rep goal → gives you a clear “first finish line”.</li>
+                <li>Products first → you have a real story.</li>
+                <li>Name list → invite more, worry less.</li>
+                <li>3 reach-outs/day → tiny wins every day.</li>
+                <li>Brand Rep goal → a clear first finish line.</li>
                 <li>Events & classes → faster skills, stronger belief.</li>
               </ul>
             </details>
@@ -258,7 +275,7 @@ export default function SponsorTrainingPage() {
                   2) Opportunity & Product Presentation
                 </h2>
                 <p className="mt-1 text-sm text-gray-600">
-                  Learn to show the plan and 1–2 hero products. Keep it short and friendly.
+                  Show the plan + 1–2 hero products. Keep it short and friendly.
                 </p>
               </div>
               <label className="inline-flex items-center gap-2 text-sm text-gray-700">
@@ -276,16 +293,16 @@ export default function SponsorTrainingPage() {
               <div className="rounded-xl border border-gray-100 bg-gray-50 p-3">
                 <h3 className="font-semibold">Say this (simple script)</h3>
                 <p className="mt-1">
-                  “I’m working on something new that helps people look and feel great.
+                  “I’m working on something that helps people look and feel great.
                   Can I show you a quick 10-minute idea and 2 products I like?”
                 </p>
               </div>
               <div className="rounded-xl border border-gray-100 bg-gray-50 p-3">
                 <h3 className="font-semibold">Your mini deck</h3>
                 <ul className="mt-1 list-disc pl-5 space-y-1">
-                  <li>1 slide: Why now (health/beauty/opportunity)</li>
-                  <li>2 slides: Your story + product results</li>
-                  <li>1 slide: How to start (simple pack + support)</li>
+                  <li>Why now (health/beauty/opportunity)</li>
+                  <li>Your story + product results</li>
+                  <li>How to start (simple pack + support)</li>
                 </ul>
               </div>
             </div>
@@ -299,7 +316,7 @@ export default function SponsorTrainingPage() {
                   3) How to do A-B-C
                 </h2>
                 <p className="mt-1 text-sm text-gray-600">
-                  A = Value Add (meeting/upline/tools) · B = Bridge (you) · C = Customer/Prospect.
+                  A = Value Add (meeting/upline/tools) · B = Bridge (you) · C = Customer.
                   Your job: connect C to A.
                 </p>
               </div>
@@ -318,14 +335,14 @@ export default function SponsorTrainingPage() {
               <div className="rounded-xl border border-gray-100 bg-gray-50 p-3">
                 <h3 className="font-semibold">Quick example</h3>
                 <p className="mt-1">
-                  “Can I introduce you to my mentor for 10 minutes? They can answer your questions
-                  and show what to do first.”
+                  “Can I introduce you to my mentor for 10 minutes?
+                  They can answer your questions and show what to do first.”
                 </p>
               </div>
               <div className="rounded-xl border border-gray-100 bg-gray-50 p-3">
                 <h3 className="font-semibold">Best practices</h3>
                 <ul className="mt-1 list-disc pl-5 space-y-1">
-                  <li>Set the time and purpose clearly.</li>
+                  <li>Set time & purpose clearly.</li>
                   <li>Hype the value of A (why it helps).</li>
                   <li>Stay in the chat; learn how your mentor answers.</li>
                 </ul>
@@ -342,7 +359,7 @@ export default function SponsorTrainingPage() {
               Back to Dashboard
             </a>
             <p className="text-xs text-gray-500">
-              Your progress is saved automatically. Keep it simple. Do a little each day.
+              Your progress saves automatically. Do a little each day.
             </p>
           </div>
         </div>
