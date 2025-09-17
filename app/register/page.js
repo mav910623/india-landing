@@ -16,7 +16,6 @@ import {
   writeBatch,
   limit,
 } from "firebase/firestore";
-// Build full country list at runtime (tiny import)
 import { getCountries, getCountryCallingCode } from "libphonenumber-js/min";
 
 /** =========================================================
@@ -61,17 +60,21 @@ function constrainPanCore(core) {
   const raw = unmaskPan(core).slice(0, 10);
   let out = "";
   for (let i = 0; i < raw.length && out.length < 10; i++) {
-    const ch = raw[i], idx = out.length;
-    if (idx <= 4 || idx === 9) { if (/[A-Z]/.test(ch)) out += ch; }
-    else { if (/[0-9]/.test(ch)) out += ch; }
+    const ch = raw[i],
+      idx = out.length;
+    if (idx <= 4 || idx === 9) {
+      if (/[A-Z]/.test(ch)) out += ch;
+    } else {
+      if (/[0-9]/.test(ch)) out += ch;
+    }
   }
   return out;
 }
 function formatPanMasked(core10) {
   const c = constrainPanCore(core10);
   if (c.length <= 5) return c;
-  if (c.length <= 9) return `${c.slice(0,5)}-${c.slice(5)}`;
-  return `${c.slice(0,5)}-${c.slice(5,9)}-${c.slice(9)}`;
+  if (c.length <= 9) return `${c.slice(0, 5)}-${c.slice(5)}`;
+  return `${c.slice(0, 5)}-${c.slice(5, 9)}-${c.slice(9)}`;
 }
 const isValidPANCore = (core) => /^[A-Z]{5}[0-9]{4}[A-Z]$/.test(core);
 
@@ -81,18 +84,16 @@ function toE164(dial, local) {
   if (String(local || "").trim().startsWith("+")) {
     const just = String(local).replace(/[^\d+]/g, "");
     return just.startsWith("+") ? just : `+${just}`;
-    }
+  }
   const dialDigits = d.replace(/\D/g, "");
   if (!dialDigits || !digits) return "";
   return `+${dialDigits}${digits}`;
 }
-
 function flagFromCC(cc) {
-  // Regional Indicator Symbols
   if (!cc || cc.length !== 2) return "🏳️";
   const A = 0x1f1e6;
   const a = "A".charCodeAt(0);
-  return String.fromCodePoint(...cc.toUpperCase().split("").map(c => A + (c.charCodeAt(0) - a)));
+  return String.fromCodePoint(...cc.toUpperCase().split("").map((c) => A + (c.charCodeAt(0) - a)));
 }
 
 /** =========================================================
@@ -101,9 +102,10 @@ function flagFromCC(cc) {
 export default function RegisterPage() {
   const router = useRouter();
 
-  // ---------- Countries (built at runtime) ----------
+  /** ---------- Countries (runtime-built) ---------- */
   const [countries, setCountries] = useState([]);
-  const [country, setCountry] = useState(null);
+  const [country, setCountry] = useState(null); // for phone calling code
+  const [residence, setResidence] = useState(null); // for international types
 
   useEffect(() => {
     try {
@@ -111,32 +113,37 @@ export default function RegisterPage() {
       const list = getCountries()
         .map((cc) => {
           let dial = "";
-          try { dial = `+${getCountryCallingCode(cc)}`; } catch { dial = ""; }
+          try {
+            dial = `+${getCountryCallingCode(cc)}`;
+          } catch {
+            dial = "";
+          }
           const name = regionNames.of(cc) || cc;
           return { cc, name, dial, flag: flagFromCC(cc) };
         })
-        .filter(c => c.dial) // keep only those with calling codes
+        .filter((c) => c.dial)
         .sort((a, b) => a.name.localeCompare(b.name));
       setCountries(list);
 
-      // Default to India if present, else first in list
-      const def = list.find(c => c.cc === "IN") || list[0] || null;
-      setCountry(def);
+      const india = list.find((c) => c.cc === "IN") || null;
+      setCountry(india || list[0] || null);
+      setResidence(list[0] || india || null);
     } catch (e) {
       console.error("Building country list failed:", e);
       setCountries([]);
       setCountry(null);
+      setResidence(null);
     }
   }, []);
 
-  // ---------- Steps & Sponsor ----------
+  /** ---------- Steps & Sponsor ---------- */
   const [step, setStep] = useState(1);
   const [uplineInput, setUplineInput] = useState("");
   const [upline, setUpline] = useState(null);
   const [checkingUpline, setCheckingUpline] = useState(false);
   const [refLocked, setRefLocked] = useState(false);
 
-  // Capture ?ref=... without useSearchParams (avoids Suspense requirement)
+  // Capture ?ref=... (no useSearchParams → no Suspense requirement)
   useEffect(() => {
     if (typeof window !== "undefined") {
       const p = new URLSearchParams(window.location.search);
@@ -145,7 +152,6 @@ export default function RegisterPage() {
         const up = ref.toUpperCase();
         setUplineInput(up);
         setRefLocked(true);
-        // Auto-verify upline on mount if ref present
         (async () => {
           setCheckingUpline(true);
           try {
@@ -172,7 +178,7 @@ export default function RegisterPage() {
     }
   }, []);
 
-  // ---------- Form fields ----------
+  /** ---------- Form fields ---------- */
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [emailTouched, setEmailTouched] = useState(false);
@@ -185,19 +191,27 @@ export default function RegisterPage() {
   const [password, setPassword] = useState("");
   const [pwVisible, setPwVisible] = useState(false);
 
+  const [participantType, setParticipantType] = useState("IN"); // "IN" | "NRI" | "OCI" | "INTL"
+  const isInternational = participantType !== "IN";
+
+  const [nuskinId, setNuskinId] = useState("");
+
   const [registering, setRegistering] = useState(false);
   const [notice, setNotice] = useState("");
 
+  // Validate
   const emailValid = useMemo(() => isValidEmail(email), [email]);
   const pwScore = useMemo(() => passwordScore(password), [password]);
   const pwOk = pwScore === 3;
 
-  // PAN mask handling
+  // PAN mask handling (for Indian National only)
   function onPanChange(v) {
     const core = constrainPanCore(v);
     setPanCore(core);
     setPanInput(formatPanMasked(core));
   }
+
+  /** ---------- Actions ---------- */
 
   // Step 1 — Verify upline
   const checkUpline = async () => {
@@ -243,18 +257,15 @@ export default function RegisterPage() {
     const emailNorm = String(email || "").trim().toLowerCase();
     const rawPhone = String(phoneLocal || "").trim();
     const e164 = toE164(country?.dial, phoneLocal);
-    const panNorm = panCore;
 
-    if (!nameNorm || !emailNorm || !rawPhone || !panNorm || !password) {
-      setNotice("Please fill all fields.");
+    const panNorm = isInternational ? "" : panCore;
+
+    if (!nameNorm || !emailNorm || !rawPhone || !password) {
+      setNotice("Please fill all required fields.");
       return;
     }
     if (!emailValid) {
       setNotice("Please enter a valid email address.");
-      return;
-    }
-    if (!isValidPANCore(panNorm)) {
-      setNotice("PAN format invalid. Expected AAAAA-9999-A.");
       return;
     }
     if (!e164.startsWith("+")) {
@@ -264,6 +275,23 @@ export default function RegisterPage() {
     if (!pwOk) {
       setNotice("Password must be at least 8 characters, include a capital letter and a number.");
       return;
+    }
+
+    // Conditional requirements
+    if (!isInternational) {
+      if (!isValidPANCore(panNorm)) {
+        setNotice("PAN format invalid. Expected AAAAA-9999-A.");
+        return;
+      }
+    } else {
+      if (!residence?.cc) {
+        setNotice("Please select your country of residence.");
+        return;
+      }
+      if (!nuskinId.trim()) {
+        setNotice("Please enter your Nu Skin ID.");
+        return;
+      }
     }
 
     setRegistering(true);
@@ -288,20 +316,24 @@ export default function RegisterPage() {
         return;
       }
 
-      // PAN uniqueness
-      const panQ = query(collection(db, "users"), where("pan", "==", panNorm), limit(1));
-      const panSnap = await getDocs(panQ);
-      if (!panSnap.empty) {
-        setRegistering(false);
-        setNotice("❌ This PAN is already registered.");
-        return;
+      // PAN uniqueness (India only)
+      if (!isInternational) {
+        const panQ = query(collection(db, "users"), where("pan", "==", panNorm), limit(1));
+        const panSnap = await getDocs(panQ);
+        if (!panSnap.empty) {
+          setRegistering(false);
+          setNotice("❌ This PAN is already registered.");
+          return;
+        }
       }
 
       // Auth
       const userCredential = await createUserWithEmailAndPassword(auth, emailNorm, password);
       createdAuthUser = userCredential.user;
       const uid = createdAuthUser.uid;
-      try { await updateProfile(createdAuthUser, { displayName: nameNorm }); } catch {}
+      try {
+        await updateProfile(createdAuthUser, { displayName: nameNorm });
+      } catch {}
 
       // Referral ID
       const referralId = await generateUniqueReferralId(uid);
@@ -309,7 +341,7 @@ export default function RegisterPage() {
       // Atomic write
       const batch = writeBatch(db);
       const userRef = doc(db, "users", uid);
-      batch.set(userRef, {
+      const payload = {
         uid,
         name: nameNorm,
         nameLC: nameNorm.toLowerCase(),
@@ -318,12 +350,29 @@ export default function RegisterPage() {
         phoneRaw: rawPhone,
         countryCode: country?.cc || "",
         countryDial: country?.dial || "",
-        pan: panNorm,
         referralId,
         upline: upline.id,
         referrals: [],
+        participantType, // "IN" | "NRI" | "OCI" | "INTL"
+        isInternational,
         createdAt: serverTimestamp(),
-      });
+      };
+
+      if (isInternational) {
+        payload["pan"] = null;
+        payload["residenceCountryCC"] = residence?.cc || "";
+        payload["residenceCountryDial"] = residence?.dial || "";
+        payload["residenceCountryName"] = residence?.name || "";
+        payload["nuskinId"] = nuskinId.trim();
+      } else {
+        payload["pan"] = panNorm;
+        payload["residenceCountryCC"] = "IN";
+        payload["residenceCountryDial"] = "+91";
+        payload["residenceCountryName"] = "India";
+        payload["nuskinId"] = "";
+      }
+
+      batch.set(userRef, payload);
 
       const sponsorRef = doc(db, "users", upline.id);
       batch.update(sponsorRef, { referrals: arrayUnion(uid) });
@@ -343,9 +392,13 @@ export default function RegisterPage() {
       setPanInput("");
       setPanCore("");
       setPassword("");
+      setParticipantType("IN");
+      setNuskinId("");
     } catch (err) {
       console.error("Registration error:", err);
-      try { if (createdAuthUser?.delete) await createdAuthUser.delete(); } catch {}
+      try {
+        if (createdAuthUser?.delete) await createdAuthUser.delete();
+      } catch {}
       setNotice(`❌ ${err?.message || "Registration failed. Try again."}`);
     } finally {
       setRegistering(false);
@@ -401,11 +454,19 @@ export default function RegisterPage() {
 
           {/* Step indicator */}
           <div className="mb-5 flex items-center justify-center gap-2 text-xs text-gray-600">
-            <span className={`px-2.5 py-1 rounded-full border ${step === 1 ? "border-blue-200 bg-blue-50 text-blue-700" : "border-gray-200 bg-gray-50"}`}>
+            <span
+              className={`px-2.5 py-1 rounded-full border ${
+                step === 1 ? "border-blue-200 bg-blue-50 text-blue-700" : "border-gray-200 bg-gray-50"
+              }`}
+            >
               1 · Sponsor
             </span>
             <span>→</span>
-            <span className={`px-2.5 py-1 rounded-full border ${step === 2 ? "border-blue-200 bg-blue-50 text-blue-700" : "border-gray-200 bg-gray-50"}`}>
+            <span
+              className={`px-2.5 py-1 rounded-full border ${
+                step === 2 ? "border-blue-200 bg-blue-50 text-blue-700" : "border-gray-200 bg-gray-50"
+              }`}
+            >
               2 · Your details
             </span>
           </div>
@@ -445,15 +506,38 @@ export default function RegisterPage() {
                 <div className="text-xs text-gray-500">Upline confirmed</div>
                 <div className="text-base sm:text-lg font-medium text-gray-900">
                   {upline.name}{" "}
-                  <span className="text-xs sm:text-sm text-gray-500 ml-1">
-                    ({upline.referralId})
-                  </span>
+                  <span className="text-xs sm:text-sm text-gray-500 ml-1">({upline.referralId})</span>
                 </div>
               </div>
 
               <label className="block text-sm font-medium text-gray-800 mb-3">
                 Step 2 — Your details
               </label>
+
+              {/* Participant Type */}
+              <div className="mb-3 grid grid-cols-1 sm:grid-cols-3 gap-2">
+                <div className="sm:col-span-3">
+                  <label className="block text-xs font-medium text-gray-700 mb-1">Your status</label>
+                  <select
+                    value={participantType}
+                    onChange={(e) => setParticipantType(e.target.value)}
+                    className="w-full rounded-2xl border border-gray-200 px-3 py-3 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="IN">Indian National</option>
+                    <option value="NRI">NRI</option>
+                    <option value="OCI">OCI</option>
+                    <option value="INTL">International Founder</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Reminder for international */}
+              {isInternational && (
+                <div className="mb-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-[13px] text-amber-900">
+                  Reminder: You have to be paid as a <strong>Brand Representative</strong> in your country of registration
+                  to participate in the India launch.
+                </div>
+              )}
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <input
@@ -481,13 +565,13 @@ export default function RegisterPage() {
                   )}
                 </div>
 
-                {/* Country + Phone */}
+                {/* Country (phone) + Phone */}
                 <div className="col-span-1 sm:col-span-2">
                   <div className="flex gap-2">
                     <select
                       value={country?.cc || ""}
                       onChange={(e) => {
-                        const next = countries.find(c => c.cc === e.target.value) || null;
+                        const next = countries.find((c) => c.cc === e.target.value) || null;
                         setCountry(next);
                       }}
                       className="w-[60%] sm:w-1/2 rounded-2xl border border-gray-200 px-3 py-3 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -504,7 +588,7 @@ export default function RegisterPage() {
                       value={phoneLocal}
                       onChange={(e) => setPhoneLocal(e.target.value)}
                       inputMode="tel"
-                      placeholder={`Phone number`}
+                      placeholder="Phone number"
                       className="flex-1 rounded-2xl border border-gray-200 px-3 py-3 text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
                     />
                   </div>
@@ -517,25 +601,64 @@ export default function RegisterPage() {
                   </p>
                 </div>
 
-                {/* PAN */}
-                <div>
-                  <input
-                    value={panInput}
-                    onChange={(e) => onPanChange(e.target.value)}
-                    placeholder="PAN (AAAAA-9999-A)"
-                    className={`w-full rounded-2xl border px-3 py-3 text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 ${
-                      !panCore || isValidPANCore(panCore)
-                        ? "border-gray-200 focus:ring-blue-500"
-                        : "border-red-300 focus:ring-red-500"
-                    }`}
-                  />
-                  <p className="mt-1 text-xs text-gray-500">
-                    Format: <span className="font-mono">AAAAA-9999-A</span>
-                  </p>
-                  {panCore && !isValidPANCore(panCore) && (
-                    <p className="mt-1 text-xs text-red-600">Invalid PAN pattern.</p>
-                  )}
-                </div>
+                {/* Residence Country + Nu Skin ID (international only) */}
+                {isInternational && (
+                  <>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">
+                        Country of residence
+                      </label>
+                      <select
+                        value={residence?.cc || ""}
+                        onChange={(e) => {
+                          const next = countries.find((c) => c.cc === e.target.value) || null;
+                          setResidence(next);
+                        }}
+                        className="w-full rounded-2xl border border-gray-200 px-3 py-3 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      >
+                        {countries.map((c) => (
+                          <option key={c.cc} value={c.cc}>
+                            {c.flag} {c.name} ({c.dial})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">
+                        Nu Skin ID
+                      </label>
+                      <input
+                        value={nuskinId}
+                        onChange={(e) => setNuskinId(e.target.value)}
+                        placeholder="Your Nu Skin ID"
+                        className="w-full rounded-2xl border border-gray-200 px-3 py-3 text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                    </div>
+                  </>
+                )}
+
+                {/* PAN (Indian National only) */}
+                {!isInternational && (
+                  <div>
+                    <input
+                      value={panInput}
+                      onChange={(e) => onPanChange(e.target.value)}
+                      placeholder="PAN (AAAAA-9999-A)"
+                      className={`w-full rounded-2xl border px-3 py-3 text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 ${
+                        !panCore || isValidPANCore(panCore)
+                          ? "border-gray-200 focus:ring-blue-500"
+                          : "border-red-300 focus:ring-red-500"
+                      }`}
+                    />
+                    <p className="mt-1 text-xs text-gray-500">
+                      Format: <span className="font-mono">AAAAA-9999-A</span>
+                    </p>
+                    {panCore && !isValidPANCore(panCore) && (
+                      <p className="mt-1 text-xs text-red-600">Invalid PAN pattern.</p>
+                    )}
+                  </div>
+                )}
 
                 {/* Password */}
                 <div>
