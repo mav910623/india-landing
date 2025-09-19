@@ -14,16 +14,11 @@ export const fetchCache = "force-no-store";
 
 /** ----- Pre-Launch (Module 0) Steps ----- */
 const PRELAUNCH_STEPS = [
-  "Learn the India Story (memorize the 30-second script).",
-  "Write your India Namelist (20–30 names).",
-  "Sort your names: A (hot), B (warm), C (cold).",
-  "Block a daily 60-minute Power Hour for invites.",
-  "Send simple invites to the next opportunity session.",
-  "Connect, don’t convince — use Zooms, meet-ups, or a leader 3-way.",
-  "Share the Prysm iO vision in one line (AI-powered, personalized supplements).",
-  "Capture details after exposure (name, phone, email, city).",
-  "Follow up within 24 hours: “What did you like most?” then loop in a leader.",
-  "Duplicate: help interested people start their own namelist + invites.",
+  "Learn the India Story (slides + 30-second narrative).",
+  "Build and sort your Namelist (20–30 names, A/B/C).",
+  "Create curiosity by sharing what you learned casually.",
+  "Encourage a call or session to hear directly from leaders.",
+  "Follow up within 24 hours and duplicate with new partners.",
 ];
 
 function percentDone(map) {
@@ -40,7 +35,7 @@ export default function PrelaunchTrainingPage() {
   const [error, setError] = useState("");
 
   // Firestore-backed progress
-  const [stepMap, setStepMap] = useState({}); // {"0": true, ...}
+  const [stepMap, setStepMap] = useState({});
   const [moduleDone, setModuleDone] = useState(false);
 
   // Auth boot
@@ -131,7 +126,6 @@ export default function PrelaunchTrainingPage() {
     const key = String(i);
     const next = { ...stepMap, [key]: !stepMap[key] };
     setStepMap(next);
-    // fire-and-forget persistence
     saveSteps(next);
   }
 
@@ -174,7 +168,7 @@ export default function PrelaunchTrainingPage() {
                 The India Story (Pre-Launch Module)
               </h1>
               <p className="mt-1 text-sm text-gray-600">
-                Learn the story, then use the checklist below to start inviting like a pro.
+                Learn the story, then follow 5 simple steps to spark curiosity and bring prospects into sessions.
               </p>
             </div>
             <div className="shrink-0">
@@ -203,9 +197,8 @@ export default function PrelaunchTrainingPage() {
           <h2 className="text-base sm:text-lg font-semibold text-gray-900 mb-3 sm:mb-4">
             India Story Slides
           </h2>
-          {/* Replace the src below with your Gamma share URL */}
           <GammaEmbed
-            src="https://gamma.app/embed/9jbf2snm23rztyd"
+            src=""
             title="India Story — Wellness Franchise Network"
           />
         </section>
@@ -213,7 +206,7 @@ export default function PrelaunchTrainingPage() {
         {/* Checklist */}
         <section className="mt-6 rounded-3xl border border-gray-100/80 bg-white/90 backdrop-blur-sm p-4 sm:p-6 shadow-xl">
           <h2 className="text-base sm:text-lg font-semibold text-gray-900">
-            Pre-Launch Sponsoring Steps (Module 0)
+            5-Step Pre-Launch
           </h2>
 
           <ul className="mt-3 divide-y divide-gray-100">
@@ -264,7 +257,7 @@ export default function PrelaunchTrainingPage() {
             </button>
 
             <span className="text-xs text-gray-500">
-              Your ticks are saved automatically. You can come back anytime.
+              Your progress is saved automatically. You can come back anytime.
             </span>
           </div>
         </section>
