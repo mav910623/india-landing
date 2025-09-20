@@ -21,7 +21,7 @@ import {
 } from "firebase/firestore";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import QRCode from "qrcode";
-import { useTranslations } from "next-intl";
+import { useTranslations, useLocale } from "next-intl";
 
 /** ===== Constants ===== */
 const MAX_DEPTH = 6;
@@ -33,6 +33,7 @@ const VIRTUALIZE_THRESHOLD = 150;
 
 export default function DashboardPage() {
   const t = useTranslations("dashboard");
+  const locale = useLocale();
   const router = useRouter();
 
   /** ===== Identity ===== */
@@ -77,7 +78,7 @@ export default function DashboardPage() {
   /** ===== Helpers ===== */
   const normalize = (s) => String(s || "").toLowerCase();
 
-  // Safer referral link (SSR-safe + env fallback).
+  // Locale-aware referral link
   const referralLink = () => {
     const site =
       (typeof window !== "undefined" && window.location?.origin) ||
@@ -85,7 +86,7 @@ export default function DashboardPage() {
       "";
     if (!site) return "";
     const ref = userData?.referralId || "";
-    return `${site}/register?ref=${ref}`;
+    return `${site}/${locale}/register?ref=${ref}`;
   };
 
   const greeting = () => {
@@ -108,7 +109,7 @@ export default function DashboardPage() {
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (cu) => {
       if (!cu) {
-        router.push("/login");
+        router.push(`/${locale}/login`);
       } else {
         setCurrentUid(cu.uid);
         await loadUser(cu.uid);
@@ -117,9 +118,8 @@ export default function DashboardPage() {
       }
     });
     return () => unsub();
-    // we intentionally keep deps minimal to avoid re-running boot logic
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [router]);
+  }, [router, locale]);
 
   /** ===== User & counts ===== */
   async function loadUser(uid) {
@@ -191,7 +191,7 @@ export default function DashboardPage() {
       if (qrTimer.current) clearTimeout(qrTimer.current);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [qrSize, userData?.referralId]);
+  }, [qrSize, userData?.referralId, locale]);
 
   /** ===== Tree: fetch children (paged) ===== */
   async function fetchChildren(parentUid, { append = false } = {}) {
@@ -418,7 +418,7 @@ export default function DashboardPage() {
             <button
               onClick={async () => {
                 await signOut(auth);
-                router.push("/login");
+                router.push(`/${locale}/login`);
               }}
               className="rounded-md bg-white/15 px-3 py-1.5 text-sm hover:bg-white/25 transition"
               title={t("tooltips.logout")}
@@ -442,7 +442,7 @@ export default function DashboardPage() {
 
               <div className="mt-3">
                 <a
-                  href="/train/sponsor"
+                  href={`/${locale}/train/prelaunch`}
                   className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 text-white px-3 py-2 text-sm font-semibold hover:bg-indigo-700 active:scale-[0.99] shadow-sm"
                   title={t("cta.trainingTitle")}
                 >
@@ -715,7 +715,7 @@ export default function DashboardPage() {
 
               <div className="mt-4">
                 <a
-                  href="/train/sponsor"
+                  href={`/${locale}/train/prelaunch`}
                   className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 text-white px-3 py-2 text-xs font-semibold hover:bg-indigo-700 active:scale-[0.99] shadow-sm"
                 >
                   📘 {t("cta.training")}
@@ -768,7 +768,7 @@ function MissionWide({ title, subtitle, progress, pct, locked = false }) {
       {locked && (
         <div className="absolute inset-0 bg-white/60 backdrop-blur-[1px] rounded-2xl grid place-items-center">
           <div className="inline-flex items-center gap-2 text-xs font-semibold text-gray-700 bg-gray-100 border border-gray-200 px-2.5 py-1.5 rounded-full shadow-sm">
-            <span>🔒</span> {/** simple icon */}
+            <span>🔒</span>
             <span>Locked</span>
           </div>
         </div>
