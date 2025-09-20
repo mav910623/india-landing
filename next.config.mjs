@@ -10,7 +10,7 @@ const nextConfig = {
   async redirects() {
     return [
       // Default root → English locale
-      { source: "/", destination: "/en", permanent: false },
+      { source: "/", destination: "/en/login", permanent: false },
 
       // Top-level routes → English equivalents
       { source: "/login", destination: "/en/login", permanent: false },
