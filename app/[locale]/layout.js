@@ -1,7 +1,12 @@
+
+export const dynamic = "force-dynamic";
+export const fetchCache = "force-no-store";
+
 import "../globals.css";
 import { NextIntlClientProvider } from "next-intl";
 import { notFound } from "next/navigation";
 import { locales, defaultLocale } from "../../i18n";
+
 
 // Generate static params for localized routes
 export function generateStaticParams() {
