@@ -4,6 +4,7 @@ export const fetchCache = "force-no-store";
 import "../globals.css";
 import { Inter } from "next/font/google";
 import ClientProviders from "./providers";
+import LocaleSwitcher from "@/components/LocaleSwitcher";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -30,14 +31,18 @@ async function loadMessages(locale) {
 
 export default async function RootLayout({ children, params }) {
   const locale = (params?.locale || "en").toLowerCase();
-  const messages = await loadMessages(locale);
+  const activeLocale = SUPPORTED.includes(locale) ? locale : "en";
+  const messages = await loadMessages(activeLocale);
 
   return (
-    <html lang={SUPPORTED.includes(locale) ? locale : "en"} className={inter.className}>
+    <html lang={activeLocale} className={inter.className}>
       <body className="bg-white text-gray-900 antialiased">
-        {/* All client-side hooks & translations live below */}
-        <ClientProviders locale={SUPPORTED.includes(locale) ? locale : "en"} messages={messages}>
+        {/* Client-side providers (next-intl, etc.) */}
+        <ClientProviders locale={activeLocale} messages={messages}>
           {children}
+
+          {/* Floating language switcher (can be hidden via env/query/localStorage) */}
+          <LocaleSwitcher />
         </ClientProviders>
       </body>
     </html>
