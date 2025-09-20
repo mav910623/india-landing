@@ -1,0 +1,42 @@
+{
+  "login": {
+    "title": "Welcome back to NuVantage India",
+    "subtitle": "Sign in to continue building your India team.",
+    "referredBy": "Referred by",
+    "createAccountPrompt": "If you don’t have an account yet,",
+    "createHere": "create one here",
+    "fields": {
+      "email": "Email address",
+      "password": "Password"
+    },
+    "placeholders": {
+      "email": "you@example.com",
+      "password": "Your password"
+    },
+    "actions": {
+      "showPw": "Show",
+      "hidePw": "Hide",
+      "login": "Login",
+      "loggingIn": "Logging in…",
+      "forgotPw": "Forgot password?",
+      "createAccount": "Create an account"
+    },
+    "errors": {
+      "invalidEmail": "Please enter a valid email address.",
+      "userDisabled": "This account has been disabled.",
+      "userNotFound": "No account found with that email.",
+      "wrongPassword": "Incorrect password. Please try again.",
+      "tooManyRequests": "Too many attempts. Please wait a moment and try again.",
+      "networkError": "Network error. Check your connection and try again.",
+      "generic": "Unable to log in. Please check your email and password.",
+      "noPassword": "Please enter your password.",
+      "invalidEmailForReset": "Enter a valid email first to receive the reset link."
+    },
+    "notices": {
+      "resetSent": "Password reset link sent. Please check your inbox."
+    },
+    "footer": {
+      "sponsorNote": "Have a sponsor? Use your referral link to register."
+    }
+  }
+}

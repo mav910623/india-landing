@@ -9,13 +9,17 @@ import {
   sendPasswordResetEmail,
   onAuthStateChanged,
 } from "firebase/auth";
+import { useTranslations } from "next-intl";
 
-const isValidEmail = (e) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(e || "").trim());
+/** Utility */
+const isValidEmail = (e) =>
+  /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(e || "").trim());
 
 export default function LoginPage() {
+  const t = useTranslations("login");
   const router = useRouter();
 
-  // Capture ?ref=... safely (no useSearchParams; avoids Suspense requirement)
+  /** Referral capture */
   const [refId, setRefId] = useState("");
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -24,7 +28,7 @@ export default function LoginPage() {
     }
   }, []);
 
-  // If already signed in, bounce to dashboard
+  /** Redirect if signed in */
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, (u) => {
       if (u) router.push("/dashboard");
@@ -32,6 +36,7 @@ export default function LoginPage() {
     return () => unsub();
   }, [router]);
 
+  /** State */
   const [email, setEmail] = useState("");
   const [emailTouched, setEmailTouched] = useState(false);
   const [password, setPassword] = useState("");
@@ -43,20 +48,25 @@ export default function LoginPage() {
 
   const emailOk = isValidEmail(email);
   const canSubmit = emailOk && password && !loading;
-  const registerHref = refId ? `/register?ref=${encodeURIComponent(refId)}` : "/register";
+  const registerHref = refId
+    ? `/register?ref=${encodeURIComponent(refId)}`
+    : "/register";
 
+  /** Error translation */
   const friendlyError = (codeOrMsg) => {
     const txt = String(codeOrMsg || "");
-    if (txt.includes("auth/invalid-email")) return "That email address looks invalid.";
-    if (txt.includes("auth/user-disabled")) return "This account has been disabled.";
-    if (txt.includes("auth/user-not-found")) return "No account found with that email.";
-    if (txt.includes("auth/wrong-password")) return "Incorrect password. Please try again.";
+    if (txt.includes("auth/invalid-email")) return t("errors.invalidEmail");
+    if (txt.includes("auth/user-disabled")) return t("errors.userDisabled");
+    if (txt.includes("auth/user-not-found")) return t("errors.userNotFound");
+    if (txt.includes("auth/wrong-password")) return t("errors.wrongPassword");
     if (txt.includes("auth/too-many-requests"))
-      return "Too many attempts. Please wait a moment and try again.";
-    if (txt.toLowerCase().includes("network")) return "Network error. Check your connection and try again.";
-    return "Unable to log in. Please check your email and password.";
+      return t("errors.tooManyRequests");
+    if (txt.toLowerCase().includes("network"))
+      return t("errors.networkError");
+    return t("errors.generic");
   };
 
+  /** Handlers */
   const handleLogin = async (e) => {
     e.preventDefault();
     setError("");
@@ -64,11 +74,11 @@ export default function LoginPage() {
 
     if (!emailOk) {
       setEmailTouched(true);
-      setError("Please enter a valid email address.");
+      setError(t("errors.invalidEmail"));
       return;
     }
     if (!password) {
-      setError("Please enter your password.");
+      setError(t("errors.noPassword"));
       return;
     }
 
@@ -88,20 +98,21 @@ export default function LoginPage() {
     setNotice("");
     if (!emailOk) {
       setEmailTouched(true);
-      setError("Enter a valid email first to receive the reset link.");
+      setError(t("errors.invalidEmailForReset"));
       return;
     }
     try {
       await sendPasswordResetEmail(auth, email.trim());
-      setNotice("Password reset link sent. Please check your inbox.");
+      setNotice(t("notices.resetSent"));
     } catch (err) {
       setError(friendlyError(err.code || err.message));
     }
   };
 
+  /** UI */
   return (
     <div className="min-h-screen bg-gradient-to-b from-sky-50 via-white to-white">
-      {/* Subtle background ornaments */}
+      {/* Background ornaments */}
       <div className="pointer-events-none fixed inset-0 -z-10">
         <div className="absolute -top-24 -left-16 h-72 w-72 rounded-full bg-blue-100/40 blur-3xl" />
         <div className="absolute -bottom-16 -right-24 h-72 w-72 rounded-full bg-indigo-100/40 blur-3xl" />
@@ -115,7 +126,7 @@ export default function LoginPage() {
               <Image
                 src="/nuvantage-icon.svg"
                 alt="NuVantage India"
-                width={96}     // bigger logo
+                width={96}
                 height={96}
                 priority
                 className="block"
@@ -123,18 +134,21 @@ export default function LoginPage() {
             </div>
 
             <h1 className="mt-4 text-[22px] sm:text-2xl font-semibold tracking-tight text-gray-900">
-              Welcome back to NuVantage India
+              {t("title")}
             </h1>
-            <p className="mt-1 text-sm text-gray-600">
-              Sign in to continue building your India team.
-            </p>
+            <p className="mt-1 text-sm text-gray-600">{t("subtitle")}</p>
           </div>
 
           {/* Referral banner */}
           {!!refId && (
             <div className="mt-4 rounded-2xl border border-blue-200 bg-blue-50/80 px-4 py-2 text-[13px] text-blue-800">
-              Referred by <span className="font-mono font-semibold">{refId}</span>. If you don’t have an account yet,{" "}
-              <a href={registerHref} className="underline font-medium">create one here</a>.
+              {t("referredBy")}{" "}
+              <span className="font-mono font-semibold">{refId}</span>.{" "}
+              {t("createAccountPrompt")}{" "}
+              <a href={registerHref} className="underline font-medium">
+                {t("createHere")}
+              </a>
+              .
             </div>
           )}
 
@@ -143,7 +157,6 @@ export default function LoginPage() {
             <div
               className="mt-4 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700"
               role="alert"
-              aria-live="assertive"
             >
               {error}
             </div>
@@ -152,7 +165,6 @@ export default function LoginPage() {
             <div
               className="mt-4 rounded-2xl border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800"
               role="status"
-              aria-live="polite"
             >
               {notice}
             </div>
@@ -162,7 +174,9 @@ export default function LoginPage() {
           <form onSubmit={handleLogin} className="mt-6 space-y-4" noValidate>
             {/* Email */}
             <div>
-              <label className="block text-sm font-medium text-gray-800">Email address</label>
+              <label className="block text-sm font-medium text-gray-800">
+                {t("fields.email")}
+              </label>
               <input
                 type="email"
                 value={email}
@@ -176,37 +190,39 @@ export default function LoginPage() {
                     ? "border-gray-200 focus:ring-blue-500"
                     : "border-red-300 focus:ring-red-500"
                 }`}
-                placeholder="you@example.com"
+                placeholder={t("placeholders.email")}
                 autoComplete="email"
                 inputMode="email"
                 aria-invalid={emailTouched && !emailOk ? "true" : "false"}
                 autoFocus
               />
               {emailTouched && !emailOk && (
-                <p className="mt-1 text-xs text-red-600">Please enter a valid email.</p>
+                <p className="mt-1 text-xs text-red-600">{t("errors.invalidEmail")}</p>
               )}
             </div>
 
             {/* Password */}
             <div>
-              <label className="block text-sm font-medium text-gray-800">Password</label>
+              <label className="block text-sm font-medium text-gray-800">
+                {t("fields.password")}
+              </label>
               <div className="relative mt-1">
                 <input
                   type={pwVisible ? "text" : "password"}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   className="w-full rounded-2xl border border-gray-200 px-3 py-3 pr-24 text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="Your password"
+                  placeholder={t("placeholders.password")}
                   autoComplete="current-password"
                 />
                 <button
                   type="button"
-                  aria-label={pwVisible ? "Hide password" : "Show password"}
+                  aria-label={pwVisible ? t("actions.hidePw") : t("actions.showPw")}
                   aria-pressed={pwVisible}
                   onClick={() => setPwVisible((v) => !v)}
                   className="absolute right-2 top-1/2 -translate-y-1/2 rounded-xl border border-gray-200 px-2.5 py-1.5 text-xs text-gray-700 hover:bg-gray-50"
                 >
-                  {pwVisible ? "Hide" : "Show"}
+                  {pwVisible ? t("actions.hidePw") : t("actions.showPw")}
                 </button>
               </div>
             </div>
@@ -216,7 +232,7 @@ export default function LoginPage() {
               disabled={!canSubmit}
               className="w-full rounded-2xl bg-blue-600 px-4 py-3 text-sm font-semibold text-white transition hover:bg-blue-700 active:scale-[0.99] disabled:opacity-60 disabled:cursor-not-allowed shadow-sm"
             >
-              {loading ? "Logging in…" : "Login"}
+              {loading ? t("actions.loggingIn") : t("actions.login")}
             </button>
 
             <div className="flex items-center justify-between text-sm">
@@ -225,11 +241,11 @@ export default function LoginPage() {
                 onClick={handleReset}
                 className="text-blue-700 hover:underline"
               >
-                Forgot password?
+                {t("actions.forgotPw")}
               </button>
 
               <a href={registerHref} className="text-gray-700 hover:underline">
-                Create an account
+                {t("actions.createAccount")}
               </a>
             </div>
           </form>
@@ -237,7 +253,7 @@ export default function LoginPage() {
           {/* Footer helper */}
           <div className="mt-6 border-t border-gray-100" />
           <p className="mt-4 text-center text-xs text-gray-500">
-            Have a sponsor? Use your referral link to register.
+            {t("footer.sponsorNote")}
           </p>
         </div>
       </div>
