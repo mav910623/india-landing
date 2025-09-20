@@ -19,7 +19,7 @@ async function safeImport<T = any>(path: string): Promise<T | {}> {
   try {
     const mod = await import(path);
     // JSON default export
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
     return (mod as any).default ?? mod;
   } catch {
     return {};
