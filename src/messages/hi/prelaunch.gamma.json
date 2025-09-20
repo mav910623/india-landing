@@ -1,0 +1,8 @@
+{
+  "prelaunch.gamma": {
+    "src": "https://gamma.app/embed/op6tltwz0cu9dnc",
+    "title": "प्रीलॉन्च प्रशिक्षण स्लाइड्स",
+    "missingSrc": "स्लाइड्स URL अभी कॉन्फ़िगर नहीं है। {strong}prelaunch.gamma.json{strong} में {code} कुंजी जोड़ें।",
+    "tip": "टिप: सर्वोत्तम अनुभव के लिए फुलस्क्रीन उपयोग करें।"
+  }
+}
