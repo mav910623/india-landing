@@ -19,15 +19,10 @@ import {
 } from "firebase/firestore";
 import { getCountries, getCountryCallingCode } from "libphonenumber-js/min";
 
-/** =========================================================
- *  Build/runtime hints (CSR)
- * ======================================================== */
 export const dynamic = "force-dynamic";
 export const fetchCache = "force-no-store";
 
-/** =========================================================
- *  Helpers
- * ======================================================== */
+/** ===== Helpers ===== */
 function referralIdFromUid(uid) {
   return "NU" + uid.slice(0, 6).toUpperCase();
 }
@@ -95,9 +90,7 @@ function flagFromCC(cc) {
   return String.fromCodePoint(...cc.toUpperCase().split("").map((c) => A + (c.charCodeAt(0) - a)));
 }
 
-/** =========================================================
- *  Small, accessible custom picker for phone country (i18n)
- * ======================================================== */
+/** ===== PhoneCountryPicker with better contrast ===== */
 function PhoneCountryPicker({ countries, value, onChange, t }) {
   const [open, setOpen] = useState(false);
   const rootRef = useRef(null);
@@ -127,18 +120,18 @@ function PhoneCountryPicker({ countries, value, onChange, t }) {
         aria-haspopup="listbox"
         aria-expanded={open}
         onClick={() => setOpen((v) => !v)}
-        className="inline-flex items-center gap-2 rounded-2xl border border-gray-200 bg-white px-3 py-3 text-sm text-gray-900 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
+        className="inline-flex items-center gap-2 rounded-2xl border border-gray-300 bg-white px-3 py-3 text-sm text-gray-900 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
         title={t("a11y.changeCountry")}
       >
         <span className="text-base leading-none">{current?.flag || "🌍"}</span>
-        <span className="font-mono text-gray-800">{current?.dial || "+.."}</span>
+        <span className="font-mono text-gray-900">{current?.dial || "+.."}</span>
         <svg aria-hidden="true" className={`h-4 w-4 text-gray-500 transition-transform ${open ? "rotate-180" : ""}`} viewBox="0 0 20 20" fill="currentColor">
           <path d="M5.23 7.21a.75.75 0 011.06.02L10 10.585l3.71-3.355a.75.75 0 011.02 1.1l-4.2 3.8a.75.75 0 01-1.02 0l-4.2-3.8a.75.75 0 01-.02-1.06z" />
         </svg>
       </button>
 
       {open && (
-        <div role="listbox" className="absolute z-50 mt-2 w-64 max-h-64 overflow-auto rounded-2xl border border-gray-200 bg-white p-1 shadow-lg">
+        <div role="listbox" className="absolute z-50 mt-2 w-72 max-h-72 overflow-auto rounded-2xl border border-gray-200 bg-white p-1 shadow-lg">
           {countries.map((c) => {
             const selected = current?.cc === c.cc;
             return (
@@ -148,12 +141,13 @@ function PhoneCountryPicker({ countries, value, onChange, t }) {
                 role="option"
                 aria-selected={selected}
                 onClick={() => { onChange?.(c); setOpen(false); }}
-                className={`w-full text-left rounded-xl px-2 py-2 text-sm hover:bg-gray-50 ${
-                  selected ? "bg-blue-50" : ""
+                className={`w-full text-left rounded-xl px-2.5 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                  selected ? "bg-blue-600 text-white" : "hover:bg-gray-50 text-gray-900"
                 }`}
               >
                 <span className="mr-2">{c.flag}</span>
                 <span className="align-middle">{c.name}</span>
+                <span className={`ml-2 font-mono ${selected ? "text-white/80" : "text-gray-600"}`}>{c.dial}</span>
               </button>
             );
           })}
@@ -163,15 +157,13 @@ function PhoneCountryPicker({ countries, value, onChange, t }) {
   );
 }
 
-/** =========================================================
- *  Page Component
- * ======================================================== */
+/** ===== Page Component ===== */
 export default function RegisterPage() {
   const router = useRouter();
   const { locale = "en" } = useParams();
   const t = useTranslations("register");
 
-  /** ---------- Countries (runtime-built) ---------- */
+  /** Countries */
   const [countries, setCountries] = useState([]);
   const [country, setCountry] = useState(null);
   const [residence, setResidence] = useState(null);
@@ -199,7 +191,7 @@ export default function RegisterPage() {
     }
   }, [locale]);
 
-  /** ---------- Steps & Sponsor ---------- */
+  /** Steps & Sponsor */
   const [step, setStep] = useState(1);
   const [uplineInput, setUplineInput] = useState("");
   const [upline, setUpline] = useState(null);
@@ -240,7 +232,7 @@ export default function RegisterPage() {
     }
   }, [t]);
 
-  /** ---------- Form fields ---------- */
+  /** Form fields */
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [emailTouched, setEmailTouched] = useState(false);
@@ -273,9 +265,8 @@ export default function RegisterPage() {
     setPanInput(formatPanMasked(core));
   }
 
-  /** ---------- Actions ---------- */
+  /** Actions */
 
-  // Step 1 — Verify upline
   const checkUpline = async () => {
     setNotice("");
     const id = String(uplineInput || "").trim().toUpperCase();
@@ -305,7 +296,6 @@ export default function RegisterPage() {
     }
   };
 
-  // Step 2 — Register
   const registerUser = async () => {
     setNotice("");
 
@@ -433,7 +423,7 @@ export default function RegisterPage() {
       setNotice(t("notices.registered", { referralId }));
       router.push(`/${locale}/dashboard`);
 
-      // Reset (best effort)
+      // Reset
       setStep(1);
       setUplineInput("");
       setUpline(null);
@@ -454,9 +444,7 @@ export default function RegisterPage() {
     }
   };
 
-  /** =========================================================
-   *  UI
-   * ======================================================== */
+  /** ===== UI ===== */
   return (
     <div className="min-h-screen bg-gradient-to-b from-sky-50 via-white to-white">
       {/* Ornaments */}
@@ -529,7 +517,7 @@ export default function RegisterPage() {
                   value={uplineInput}
                   onChange={(e) => setUplineInput(e.target.value.toUpperCase())}
                   placeholder={t("placeholders.sponsorId")}
-                  className="flex-1 rounded-2xl border border-gray-200 px-3 py-3 text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="flex-1 rounded-2xl border border-gray-300 px-3 py-3 text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
                   disabled={refLocked}
                 />
                 <button
@@ -541,7 +529,7 @@ export default function RegisterPage() {
                 </button>
               </div>
 
-              <p className="mt-2 text-xs text-gray-500">
+              <p className="mt-2 text-xs text-gray-600">
                 {t("hints.needSponsor")}
               </p>
             </section>
@@ -564,26 +552,33 @@ export default function RegisterPage() {
               {/* Participant Type */}
               <div className="mb-3 grid grid-cols-1 sm:grid-cols-3 gap-2">
                 <div className="sm:col-span-3">
-                  <label className="block text-xs font-medium text-gray-700 mb-1">
-                    {t("labels.status")}
-                  </label>
-                  <select
-                    value={participantType}
-                    onChange={(e) => setParticipantType(e.target.value)}
-                    className="w-full rounded-2xl border border-gray-200 px-3 py-3 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  >
-                    <option value="IN">{t("status.IN")}</option>
-                    <option value="NRI">{t("status.NRI")}</option>
-                    <option value="OCI">{t("status.OCI")}</option>
-                    <option value="INTL">{t("status.INTL")}</option>
-                  </select>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">
+                      {t("labels.status")}
+                    </label>
+                    <select
+                      value={participantType}
+                      onChange={(e) => setParticipantType(e.target.value)}
+                      className="w-full rounded-2xl border border-gray-300 px-3 py-3 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                      <option value="IN">{t("status.IN")}</option>
+                      <option value="NRI">{t("status.NRI")}</option>
+                      <option value="OCI">{t("status.OCI")}</option>
+                      <option value="INTL">{t("status.INTL")}</option>
+                    </select>
                 </div>
               </div>
 
-              {/* Reminder for international */}
-              {isInternational && (
+              {/* Reminders (split logic) */}
+              {participantType === "INTL" && (
                 <div className="mb-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-[13px] text-amber-900">
                   {t.rich("reminders.intlPayout", {
+                    strong: (chunks) => <strong>{chunks}</strong>,
+                  })}
+                </div>
+              )}
+              {(participantType === "NRI" || participantType === "OCI") && (
+                <div className="mb-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-[13px] text-amber-900">
+                  {t.rich("reminders.nriOciRequirement", {
                     strong: (chunks) => <strong>{chunks}</strong>,
                   })}
                 </div>
@@ -594,7 +589,7 @@ export default function RegisterPage() {
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   placeholder={t("placeholders.fullName")}
-                  className="w-full rounded-2xl border border-gray-200 px-3 py-3 text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full rounded-2xl border border-gray-300 px-3 py-3 text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
 
                 <div>
@@ -606,7 +601,7 @@ export default function RegisterPage() {
                     type="email"
                     className={`w-full rounded-2xl border px-3 py-3 text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 ${
                       !emailTouched || emailValid
-                        ? "border-gray-200 focus:ring-blue-500"
+                        ? "border-gray-300 focus:ring-blue-500"
                         : "border-red-300 focus:ring-red-500"
                     }`}
                   />
@@ -615,7 +610,7 @@ export default function RegisterPage() {
                   )}
                 </div>
 
-                {/* Country code (compact) + Phone */}
+                {/* Country code + Phone */}
                 <div className="col-span-1 sm:col-span-2">
                   <div className="flex gap-2 items-stretch">
                     <PhoneCountryPicker
@@ -629,12 +624,12 @@ export default function RegisterPage() {
                       onChange={(e) => setPhoneLocal(e.target.value)}
                       inputMode="tel"
                       placeholder={t("placeholders.phone")}
-                      className="flex-1 rounded-2xl border border-gray-200 px-3 py-3 text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="flex-1 rounded-2xl border border-gray-300 px-3 py-3 text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
                     />
                   </div>
-                  <p className="mt-2 text-xs text-gray-500">
+                  <p className="mt-2 text-xs text-gray-600">
                     {t("hints.phoneSavedAs")}{" "}
-                    <span className="font-mono text-gray-700">
+                    <span className="font-mono text-gray-800">
                       {toE164(country?.dial, phoneLocal) || `${country?.dial || "+"}…`}
                     </span>{" "}
                     {t("hints.whatsappReady")}
@@ -654,7 +649,7 @@ export default function RegisterPage() {
                           const next = countries.find((c) => c.cc === e.target.value) || null;
                           setResidence(next);
                         }}
-                        className="w-full rounded-2xl border border-gray-200 px-3 py-3 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        className="w-full rounded-2xl border border-gray-300 px-3 py-3 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
                       >
                         {countries.map((c) => (
                           <option key={c.cc} value={c.cc}>
@@ -672,7 +667,7 @@ export default function RegisterPage() {
                         value={nuskinId}
                         onChange={(e) => setNuskinId(e.target.value)}
                         placeholder={t("placeholders.nuskinId")}
-                        className="w-full rounded-2xl border border-gray-200 px-3 py-3 text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        className="w-full rounded-2xl border border-gray-300 px-3 py-3 text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
                       />
                     </div>
                   </>
@@ -687,11 +682,11 @@ export default function RegisterPage() {
                       placeholder={t("placeholders.pan")}
                       className={`w-full rounded-2xl border px-3 py-3 text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 ${
                         !panCore || isValidPANCore(panCore)
-                          ? "border-gray-200 focus:ring-blue-500"
+                          ? "border-gray-300 focus:ring-blue-500"
                           : "border-red-300 focus:ring-red-500"
                       }`}
                     />
-                    <p className="mt-1 text-xs text-gray-500">
+                    <p className="mt-1 text-xs text-gray-600">
                       {t.rich("hints.panFormat", { mono: (c) => <span className="font-mono">{c}</span> })}
                     </p>
                     {panCore && !isValidPANCore(panCore) && (
@@ -708,7 +703,7 @@ export default function RegisterPage() {
                       onChange={(e) => setPassword(e.target.value)}
                       placeholder={t("placeholders.password")}
                       type={pwVisible ? "text" : "password"}
-                      className="w-full rounded-2xl border border-gray-200 px-3 py-3 pr-24 text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full rounded-2xl border border-gray-300 px-3 py-3 pr-24 text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
                     />
                     <button
                       type="button"
@@ -759,7 +754,7 @@ export default function RegisterPage() {
                     setNotice("");
                   }}
                   type="button"
-                  className="rounded-2xl border border-gray-200 px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 active:scale-[0.99] transition"
+                  className="rounded-2xl border border-gray-300 px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 active:scale-[0.99] transition"
                 >
                   {t("actions.back")}
                 </button>
@@ -770,8 +765,7 @@ export default function RegisterPage() {
 
         {/* Auth toggle helper */}
         <div className="mt-4 text-center text-sm text-gray-600">
-          {t("already")}
-          {" "}
+          {t("already")}{" "}
           <a href={`/${locale}/login`} className="text-blue-600 hover:underline">
             {t("actions.login")}
           </a>
