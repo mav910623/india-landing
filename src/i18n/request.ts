@@ -1,64 +1,62 @@
+// src/i18n/request.ts
 import {getRequestConfig} from 'next-intl/server';
 
-/**
- * We load only the namespaces needed for each route,
- * BUT we also merge in your old big file (src/messages/<locale>.json) as a fallback.
- * That way, nothing breaks while you gradually split files.
- */
+type Messages = Record<string, Record<string, unknown>>;
 
-const ROUTE_NAMESPACES: Array<[RegExp, string[]]> = [
-  [/^\/dashboard$/, ['dashboard']],
-  [/^\/train\/prelaunch$/, ['prelaunch', 'prelaunch.gamma']],
-  [/^\/login$/, ['login']],
-  [/^\/register$/, ['register']],
-  // Everything else gets 'common'
-  [/.*/, ['common']]
-];
+/** Map URL prefixes to the message namespaces that page needs */
+const ROUTE_NAMESPACES: Record<string, string[]> = {
+  '/': ['landing', 'common'],
+  '/login': ['login', 'common'],
+  '/register': ['register', 'common'],
+  '/dashboard': ['dashboard', 'common'],
+  '/train/prelaunch': ['prelaunch', 'common']
+};
 
-async function safeImport<T = any>(path: string): Promise<T | {}> {
-  try {
-    const mod = await import(path);
-    // JSON default export
-   
-    return (mod as any).default ?? mod;
-  } catch {
-    return {};
+/** Decide which namespaces to load for a given path */
+function namespacesFor(path: string): string[] {
+  const clean = path !== '/' && path.endsWith('/') ? path.slice(0, -1) : path;
+  for (const [prefix, nss] of Object.entries(ROUTE_NAMESPACES)) {
+    if (clean === prefix || clean.startsWith(prefix + '/')) {
+      // Ensure "common" is always present once
+      return Array.from(new Set([...nss, 'common']));
+    }
   }
+  return ['common'];
 }
 
-async function loadNamespaces(locale: string, namespaces: string[]) {
-  const out: Record<string, unknown> = {};
-  for (const ns of namespaces) {
-    const msg = await safeImport<Record<string, unknown>>(
-      `../messages/${locale}/${ns}.json`
-    );
-    Object.assign(out, msg); // files are shaped like { "<ns>": {...} }
-  }
+/** Load JSON for the given locale + namespaces; fall back to EN if missing */
+async function loadMessages(
+  locale: string,
+  namespaces: string[]
+): Promise<Messages> {
+  const out: Messages = {};
+  await Promise.all(
+    namespaces.map(async (ns) => {
+      try {
+        const mod = await import(`../messages/${locale}/${ns}.json`);
+        out[ns] = (mod as any).default ?? mod;
+      } catch {
+        try {
+          const mod = await import(`../messages/en/${ns}.json`);
+          out[ns] = (mod as any).default ?? mod;
+        } catch {
+          out[ns] = {};
+        }
+      }
+    })
+  );
   return out;
 }
 
+/** Export the Next-Intl request config */
 export default getRequestConfig(async ({locale, request}) => {
-  // Remove /en, /hi, /ta from the beginning so we can match the path
-  const path = request.nextUrl.pathname.replace(/^\/(en|hi|ta)(?=\/|$)/, '') || '/';
+  // Strip the locale prefix (/en|/hi|/ta) from the URL so we can match the route
+  const path =
+    request.nextUrl?.pathname?.replace(/^\/(en|hi|ta)(?=\/|$)/, '') || '/';
 
-  // Figure out which namespaces this route needs
-  const needed = ROUTE_NAMESPACES
-    .filter(([rx]) => rx.test(path))
-    .flatMap(([, list]) => list);
+  const namespaces = namespacesFor(path);
+  const messages = await loadMessages(locale, namespaces);
 
-  // Always include 'common' at least
-  if (!needed.includes('common')) needed.push('common');
-
-  // 1) Try to load per-page files (new way)
-  const perPage = await loadNamespaces(locale, needed);
-
-  // 2) Fallback: load your old big file if it exists (old way)
-  const bigFile = await safeImport<Record<string, unknown>>(
-    `../messages/${locale}.json`
-  );
-
-  // Merge: page files override big file
-  const messages = {...bigFile, ...perPage};
-
-  return {messages};
+  // IMPORTANT: return both `locale` and `messages`
+  return {locale, messages};
 });
