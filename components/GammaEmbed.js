@@ -3,13 +3,13 @@
 import {useEffect, useRef, useState} from "react";
 
 /**
- * GammaEmbed (no i18n inside)
+ * GammaEmbed
  * Props:
- * - src (string)       : deck URL (required)
- * - title (string)     : iframe title (optional)
+ * - src (string)       : deck URL
+ * - title (string)     : iframe title
  * - ratio (number)     : width/height (default 16/9)
- * - missingText (node) : what to show if src is missing
- * - tipText (string)   : small hint text under the frame
+ * - missingText (node) : shown when src is missing/invalid
+ * - tipText (string)   : small hint under the frame
  */
 export default function GammaEmbed({ src, title, ratio = 16 / 9, missingText, tipText }) {
   const boxRef = useRef(null);
@@ -28,7 +28,9 @@ export default function GammaEmbed({ src, title, ratio = 16 / 9, missingText, ti
     return () => ro.disconnect();
   }, [ratio]);
 
-  if (!src) {
+  const isLikelyUrl = typeof src === "string" && /^https?:\/\//i.test(src);
+
+  if (!isLikelyUrl) {
     return (
       <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
         {missingText || "Slides link is missing."}

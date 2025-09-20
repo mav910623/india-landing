@@ -21,6 +21,21 @@ function percentDone(map, total) {
   return Math.round((done / total) * 100);
 }
 
+/** Per-locale Gamma URL fallbacks */
+const FALLBACK_GAMMA = {
+  en: "https://gamma.app/embed/vab8y6dpmm9ogzi",
+  hi: "https://gamma.app/embed/op6tltwz0cu9dnc",
+  ta: "https://gamma.app/embed/y357cp2257rttn4"
+};
+
+/** Helper: return translation or fallback if missing (next-intl returns the key string when missing) */
+function withFallback(value, key, fallback) {
+  if (!value) return fallback;
+  // If translation is missing, next-intl returns the key (e.g., "gamma.src" when using namespace "prelaunch")
+  if (value === key) return fallback;
+  return value;
+}
+
 export default function PrelaunchTrainingPage() {
   const t = useTranslations("prelaunch");
   const locale = useLocale();
@@ -138,6 +153,24 @@ export default function PrelaunchTrainingPage() {
     saveSteps(next);
   }
 
+  // ---------- Safe i18n fallbacks for Gamma ----------
+
+  const rawSrc = t("gamma.src");
+  const gammaSrc =
+    /^https?:\/\//i.test(rawSrc)
+      ? rawSrc
+      : FALLBACK_GAMMA[locale] || FALLBACK_GAMMA.en;
+
+  const gammaTitle = withFallback(t("gamma.title"), "gamma.title", "Prelaunch Overview (Slides)");
+  const gammaTip   = withFallback(t("gamma.tip"),   "gamma.tip",   "Tip: Open in a new tab for fullscreen.");
+
+  const gammaMissingText = t.rich?.("gamma.missingSrc", {
+    code: (c) => <span className="font-mono">{c}</span>,
+    strong: (c) => <strong>{c}</strong>
+  }) || "Slides link is missing. Ask your sponsor.";
+
+  // ---------- UI ----------
+
   if (loading) {
     return (
       <div className="min-h-screen grid place-items-center bg-white">
@@ -207,13 +240,10 @@ export default function PrelaunchTrainingPage() {
             {t("slides.title")}
           </h2>
           <GammaEmbed
-            src={t("gamma.src")}
-            title={t("gamma.title")}
-            tipText={t("gamma.tip")}
-            missingText={t.rich("gamma.missingSrc", {
-              code: (c) => <span className="font-mono">{c}</span>,
-              strong: (c) => <strong>{c}</strong>
-            })}
+            src={gammaSrc}
+            title={gammaTitle}
+            tipText={gammaTip}
+            missingText={gammaMissingText}
           />
         </section>
 
