@@ -1,0 +1,43 @@
+{
+  "loading": "Loading…",
+  "brandAlt": "NuVantage India",
+  "title": "Pre-Launch Training",
+  "subtitle": "Watch the slides, then tick the checklist. Your progress is saved automatically.",
+  "chip": {
+    "completed": "Completed",
+    "progress": "{pct}% complete"
+  },
+  "errors": {
+    "load": "Couldn't load your training progress.",
+    "save": "Couldn't save your checklist just now.",
+    "update": "Couldn't mark this module complete."
+  },
+  "slides": {
+    "title": "Slides"
+  },
+  "checklist": {
+    "title": "Checklist"
+  },
+  "steps": {
+    "0": "Watch the complete deck",
+    "1": "Write down your top 3 takeaways",
+    "2": "Share the referral link with one person",
+    "3": "Join the sponsor call",
+    "4": "Confirm your next step"
+  },
+  "btn": {
+    "alreadyDoneTitle": "Module already marked as done",
+    "markDoneTitle": "Mark this module as done",
+    "completed": "Completed",
+    "markDone": "Mark as done"
+  },
+  "savedHint": "Changes save automatically.",
+  "backDashboard": "← Back to Dashboard",
+  "postLaunchCta": "Next: Sponsoring & Post-Launch",
+  "gamma": {
+    "title": "Pre-Launch Deck",
+    "src": "https://gamma.app/embed/vab8y6dpmm9ogzi",
+    "tip": "Use the ⋯ menu on the deck to open full screen.",
+    "missingSrc": "No deck URL set. Add <code>prelaunch.gamma.src</code> in your locale files, or <strong>paste a Gamma embed URL here</strong>."
+  }
+}
