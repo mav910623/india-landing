@@ -7,28 +7,26 @@ import { onAuthStateChanged } from "firebase/auth";
 import { auth, db } from "@/lib/firebase";
 import { doc, getDoc, setDoc, updateDoc, serverTimestamp } from "firebase/firestore";
 import GammaEmbed from "@/components/GammaEmbed";
+import { useTranslations, useLocale } from "next-intl";
 
 /** Page config */
 export const dynamic = "force-dynamic";
 export const fetchCache = "force-no-store";
 
-/** ----- Pre-Launch (Module 0) Steps ----- */
-const PRELAUNCH_STEPS = [
-  "Learn the India Story (slides + 30-second narrative).",
-  "Build and sort your Namelist (20–30 names, A/B/C).",
-  "Create curiosity by sharing what you learned casually.",
-  "Encourage a call or session to hear directly from leaders.",
-  "Follow up within 24 hours and duplicate with new partners.",
-];
-
-function percentDone(map) {
-  const total = PRELAUNCH_STEPS.length;
-  const done = PRELAUNCH_STEPS.reduce((n, _, i) => (map[String(i)] ? n + 1 : n), 0);
+function percentDone(map, total) {
+  const done = Array.from({ length: total }).reduce(
+    (n, _, i) => (map[String(i)] ? n + 1 : n),
+    0
+  );
   return Math.round((done / total) * 100);
 }
 
 export default function PrelaunchTrainingPage() {
+  const t = useTranslations("prelaunch");
+  const tGamma = useTranslations("prelaunch.gamma");
+  const locale = useLocale();
   const router = useRouter();
+
   const [uid, setUid] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -38,14 +36,14 @@ export default function PrelaunchTrainingPage() {
   const [stepMap, setStepMap] = useState({});
   const [moduleDone, setModuleDone] = useState(false);
 
-  // Auth boot
+  // Auth boot (locale-aware redirect)
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (u) => {
-      if (!u) return router.push("/login");
+      if (!u) return router.push(`/${locale}/login`);
       setUid(u.uid);
     });
     return () => unsub();
-  }, [router]);
+  }, [router, locale]);
 
   // Load progress
   useEffect(() => {
@@ -62,14 +60,26 @@ export default function PrelaunchTrainingPage() {
         setModuleDone(!!m0.done);
       } catch (e) {
         console.error(e);
-        setError("Could not load your training progress.");
+        setError(t("errors.load"));
       } finally {
         setLoading(false);
       }
     })();
-  }, [uid]);
+  }, [uid, t]);
 
-  const pct = useMemo(() => percentDone(stepMap), [stepMap]);
+  // Steps (from i18n)
+  const steps = useMemo(
+    () => [
+      t("steps.0"),
+      t("steps.1"),
+      t("steps.2"),
+      t("steps.3"),
+      t("steps.4"),
+    ],
+    [t]
+  );
+
+  const pct = useMemo(() => percentDone(stepMap, steps.length), [stepMap, steps.length]);
 
   // Save steps
   async function saveSteps(nextMap) {
@@ -95,7 +105,7 @@ export default function PrelaunchTrainingPage() {
       );
     } catch (e) {
       console.error(e);
-      setError("Could not save. Please try again.");
+      setError(t("errors.save"));
     } finally {
       setSaving(false);
     }
@@ -115,7 +125,7 @@ export default function PrelaunchTrainingPage() {
       setModuleDone(true);
     } catch (e) {
       console.error(e);
-      setError("Could not update. Please try again.");
+      setError(t("errors.update"));
     } finally {
       setSaving(false);
     }
@@ -132,7 +142,7 @@ export default function PrelaunchTrainingPage() {
   if (loading) {
     return (
       <div className="min-h-screen grid place-items-center bg-white">
-        <p className="text-sm text-gray-600">Loading…</p>
+        <p className="text-sm text-gray-600">{t("loading")}</p>
       </div>
     );
   }
@@ -151,7 +161,7 @@ export default function PrelaunchTrainingPage() {
           <div className="rounded-2xl ring-1 ring-gray-100 shadow-sm p-3 bg-white">
             <Image
               src="/nuvantage-icon.svg"
-              alt="NuVantage India"
+              alt={t("brandAlt")}
               width={84}
               height={84}
               priority
@@ -165,10 +175,10 @@ export default function PrelaunchTrainingPage() {
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
             <div>
               <h1 className="text-xl sm:text-2xl font-semibold tracking-tight text-gray-900">
-                The India Story (Pre-Launch Module)
+                {t("title")}
               </h1>
               <p className="mt-1 text-sm text-gray-600">
-                Learn the story, then follow 5 simple steps to spark curiosity and bring prospects into sessions.
+                {t("subtitle")}
               </p>
             </div>
             <div className="shrink-0">
@@ -180,7 +190,7 @@ export default function PrelaunchTrainingPage() {
                 }`}
               >
                 <span className="inline-block h-2 w-2 rounded-full bg-current opacity-70" />
-                {moduleDone ? "Module Completed" : `Progress: ${pct}%`}
+                {moduleDone ? t("chip.completed") : t("chip.progress", { pct })}
               </span>
             </div>
           </div>
@@ -195,22 +205,22 @@ export default function PrelaunchTrainingPage() {
         {/* Gamma deck */}
         <section className="mt-6 rounded-3xl border border-gray-100/80 bg-white/90 backdrop-blur-sm p-3 sm:p-4 shadow-xl">
           <h2 className="text-base sm:text-lg font-semibold text-gray-900 mb-3 sm:mb-4">
-            India Story Slides
+            {t("slides.title")}
           </h2>
           <GammaEmbed
-            src=""
-            title="India Story — Wellness Franchise Network"
+            src={tGamma("src")}              // locale-specific URL from messages
+            title={tGamma("title")}
           />
         </section>
 
         {/* Checklist */}
         <section className="mt-6 rounded-3xl border border-gray-100/80 bg-white/90 backdrop-blur-sm p-4 sm:p-6 shadow-xl">
           <h2 className="text-base sm:text-lg font-semibold text-gray-900">
-            5-Step Pre-Launch
+            {t("checklist.title")}
           </h2>
 
           <ul className="mt-3 divide-y divide-gray-100">
-            {PRELAUNCH_STEPS.map((label, i) => {
+            {steps.map((label, i) => {
               const checked = !!stepMap[String(i)];
               return (
                 <li key={i} className="py-2.5 first:pt-0 last:pb-0">
@@ -229,6 +239,7 @@ export default function PrelaunchTrainingPage() {
                           ? "bg-green-600 border-green-600 text-white"
                           : "bg-white border-gray-300 text-gray-400"
                       }`}
+                      aria-hidden="true"
                     >
                       {checked ? "✓" : ""}
                     </span>
@@ -251,13 +262,13 @@ export default function PrelaunchTrainingPage() {
                   ? "bg-gray-100 text-gray-600 cursor-default"
                   : "bg-green-600 hover:bg-green-700 text-white"
               }`}
-              title={moduleDone ? "Already completed" : "Mark Module 0 as done"}
+              title={moduleDone ? t("btn.alreadyDoneTitle") : t("btn.markDoneTitle")}
             >
-              {moduleDone ? "Module Completed" : "Mark Module as Done"}
+              {moduleDone ? t("btn.completed") : t("btn.markDone")}
             </button>
 
             <span className="text-xs text-gray-500">
-              Your progress is saved automatically. You can come back anytime.
+              {t("savedHint")}
             </span>
           </div>
         </section>
@@ -265,18 +276,18 @@ export default function PrelaunchTrainingPage() {
         {/* Footer nav */}
         <div className="mt-8 flex flex-wrap items-center justify-between gap-3">
           <a
-            href="/dashboard"
+            href={`/${locale}/dashboard`}
             className="inline-flex items-center gap-2 rounded-2xl border border-gray-200 bg-white px-4 py-2.5 text-sm text-gray-800 hover:bg-gray-50 shadow-sm"
           >
-            ← Back to Dashboard
+            ← {t("backDashboard")}
           </a>
 
           <div className="flex items-center gap-2">
             <a
-              href="/train/sponsor"
+              href={`/${locale}/train/sponsor`}
               className="inline-flex items-center gap-2 rounded-2xl border border-blue-200 bg-blue-50 px-4 py-2.5 text-sm text-blue-700 hover:bg-blue-100 shadow-sm"
             >
-              Getting Started (Post-Launch)
+              {t("postLaunchCta")}
             </a>
           </div>
         </div>
