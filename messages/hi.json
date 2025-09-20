@@ -1,45 +1,34 @@
 {
   "login": {
-    "title": "NuVantage India में आपका स्वागत है",
-    "subtitle": "भारत टीम बनाने के लिए साइन इन करें।",
-    "referredBy": "रेफ़र किया गया",
-    "createAccountPrompt": "यदि आपके पास खाता नहीं है,",
-    "createHere": "यहाँ बनाएँ",
-    "fields": {
-      "email": "ईमेल पता",
-      "password": "पासवर्ड"
-    },
-    "placeholders": {
-      "email": "aap@example.com",
-      "password": "आपका पासवर्ड"
-    },
-    "actions": {
-      "showPw": "दिखाएँ",
-      "hidePw": "छिपाएँ",
-      "login": "लॉगिन",
-      "loggingIn": "लॉगिन हो रहा है…",
-      "forgotPw": "पासवर्ड भूल गए?",
-      "createAccount": "खाता बनाएँ"
-    },
-    "errors": {
-      "invalidEmail": "कृपया एक मान्य ईमेल पता दर्ज करें।",
-      "userDisabled": "यह खाता निष्क्रिय कर दिया गया है।",
-      "userNotFound": "इस ईमेल के साथ कोई खाता नहीं मिला।",
-      "wrongPassword": "गलत पासवर्ड। पुनः प्रयास करें।",
-      "tooManyRequests": "बहुत सारे प्रयास। कृपया कुछ देर बाद पुनः प्रयास करें।",
-      "networkError": "नेटवर्क त्रुटि। अपना कनेक्शन जांचें और पुनः प्रयास करें।",
-      "generic": "लॉगिन नहीं हो पाया। कृपया ईमेल और पासवर्ड जांचें।",
-      "noPassword": "कृपया पासवर्ड दर्ज करें।",
-      "invalidEmailForReset": "रीसेट लिंक प्राप्त करने के लिए मान्य ईमेल दर्ज करें।"
-    },
-    "notices": {
-      "resetSent": "पासवर्ड रीसेट लिंक भेजा गया। कृपया अपना इनबॉक्स जांचें।"
-    },
-    "footer": {
-      "sponsorNote": "क्या आपके पास स्पॉन्सर है? रजिस्टर करने के लिए उनका रेफ़रल लिंक उपयोग करें।"
+    "brandAlt": "नूवैन्टेज इंडिया",
+    "title": "NuVantage India में वापस स्वागत है",
+    "subtitle": "अपनी इंडिया टीम बनाना जारी रखने के लिए साइन इन करें।",
+    "referredBy": "रेफर किया गया: {refId}. यदि आपका खाता नहीं है, तो {createAccountLink}।",
+    "createAccountCta": "यहाँ खाता बनाएँ",
+    "emailLabel": "ईमेल पता",
+    "emailPlaceholder": "you@example.com",
+    "emailInvalid": "कृपया एक मान्य ईमेल दर्ज करें।",
+    "passwordLabel": "पासवर्ड",
+    "passwordPlaceholder": "आपका पासवर्ड",
+    "passwordShow": "दिखाएँ",
+    "passwordHide": "छिपाएँ",
+    "loginButton": "लॉगिन",
+    "loggingIn": "लॉगिन हो रहा है…",
+    "forgotPassword": "पासवर्ड भूल गए?",
+    "createAccount": "खाता बनाएँ",
+    "footerHint": "क्या आपके पास स्पॉन्सर है? रजिस्टर करने के लिए अपना रेफरल लिंक इस्तेमाल करें।",
+    "alerts": {
+      "error_invalid_email": "यह ईमेल पता मान्य नहीं लगता।",
+      "error_user_disabled": "यह खाता निष्क्रिय कर दिया गया है।",
+      "error_user_not_found": "इस ईमेल से कोई खाता नहीं मिला।",
+      "error_wrong_password": "गलत पासवर्ड। कृपया पुनः प्रयास करें।",
+      "error_too_many_requests": "बहुत अधिक प्रयास। कृपया कुछ देर बाद फिर से प्रयास करें।",
+      "error_network": "नेटवर्क त्रुटि। अपना कनेक्शन जाँचें और पुनः प्रयास करें।",
+      "error_generic": "लॉगिन नहीं हो सका। कृपया ईमेल और पासवर्ड जाँचें।",
+      "reset_need_valid_email": "रीसेट लिंक पाने के लिए पहले मान्य ईमेल दर्ज करें।",
+      "reset_sent": "पासवर्ड रीसेट लिंक भेज दिया गया है। कृपया अपना इनबॉक्स जाँचें।"
     }
-  }
-
+  },
   "dashboard": {
     "title": "टीम डैशबोर्ड",
     "help": "सहायता",
@@ -64,4 +53,3 @@
     }
   }
 }
-

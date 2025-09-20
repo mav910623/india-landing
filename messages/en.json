@@ -1,45 +1,34 @@
 {
   "login": {
+    "brandAlt": "NuVantage India",
     "title": "Welcome back to NuVantage India",
     "subtitle": "Sign in to continue building your India team.",
-    "referredBy": "Referred by",
-    "createAccountPrompt": "If you don’t have an account yet,",
-    "createHere": "create one here",
-    "fields": {
-      "email": "Email address",
-      "password": "Password"
-    },
-    "placeholders": {
-      "email": "you@example.com",
-      "password": "Your password"
-    },
-    "actions": {
-      "showPw": "Show",
-      "hidePw": "Hide",
-      "login": "Login",
-      "loggingIn": "Logging in…",
-      "forgotPw": "Forgot password?",
-      "createAccount": "Create an account"
-    },
-    "errors": {
-      "invalidEmail": "Please enter a valid email address.",
-      "userDisabled": "This account has been disabled.",
-      "userNotFound": "No account found with that email.",
-      "wrongPassword": "Incorrect password. Please try again.",
-      "tooManyRequests": "Too many attempts. Please wait a moment and try again.",
-      "networkError": "Network error. Check your connection and try again.",
-      "generic": "Unable to log in. Please check your email and password.",
-      "noPassword": "Please enter your password.",
-      "invalidEmailForReset": "Enter a valid email first to receive the reset link."
-    },
-    "notices": {
-      "resetSent": "Password reset link sent. Please check your inbox."
-    },
-    "footer": {
-      "sponsorNote": "Have a sponsor? Use your referral link to register."
+    "referredBy": "Referred by {refId}. If you don’t have an account yet, {createAccountLink}.",
+    "createAccountCta": "create one here",
+    "emailLabel": "Email address",
+    "emailPlaceholder": "you@example.com",
+    "emailInvalid": "Please enter a valid email.",
+    "passwordLabel": "Password",
+    "passwordPlaceholder": "Your password",
+    "passwordShow": "Show",
+    "passwordHide": "Hide",
+    "loginButton": "Login",
+    "loggingIn": "Logging in…",
+    "forgotPassword": "Forgot password?",
+    "createAccount": "Create an account",
+    "footerHint": "Have a sponsor? Use your referral link to register.",
+    "alerts": {
+      "error_invalid_email": "That email address looks invalid.",
+      "error_user_disabled": "This account has been disabled.",
+      "error_user_not_found": "No account found with that email.",
+      "error_wrong_password": "Incorrect password. Please try again.",
+      "error_too_many_requests": "Too many attempts. Please wait a moment and try again.",
+      "error_network": "Network error. Check your connection and try again.",
+      "error_generic": "Unable to log in. Please check your email and password.",
+      "reset_need_valid_email": "Enter a valid email first to receive the reset link.",
+      "reset_sent": "Password reset link sent. Please check your inbox."
     }
-  }
-
+  },
   "dashboard": {
     "title": "Team Dashboard",
     "help": "Help",
@@ -64,4 +53,3 @@
     }
   }
 }
-
