@@ -1,30 +1,26 @@
 import { NextResponse } from "next/server";
+import type { NextRequest } from "next/server";
 
-const SUPPORTED = ["en", "hi", "ta"];
+const PUBLIC_FILE = /\.(.*)$/;
+const DEFAULT_LOCALE = "en";
 
-export function middleware(req: Request) {
-  const url = new URL(req.url);
-  const { pathname } = url;
+export function middleware(req: NextRequest) {
+  const { pathname } = req.nextUrl;
 
-  // Ignore Next internals, API, and static assets
+  // Skip static files and API routes
   if (
-    pathname.startsWith("/_next") ||
     pathname.startsWith("/api") ||
-    pathname.includes(".")
+    pathname.startsWith("/_next") ||
+    PUBLIC_FILE.test(pathname)
   ) {
-    return NextResponse.next();
+    return;
   }
 
-  // Already has a supported locale prefix? Allow.
-  const seg = pathname.split("/")[1];
-  if (SUPPORTED.includes(seg)) return NextResponse.next();
-
-  // Prepend default locale
-  url.pathname = `/en${pathname}`;
-  return NextResponse.redirect(url);
+  // If no locale prefix, redirect to default locale
+  const segments = pathname.split("/");
+  if (!segments[1] || ["en", "hi", "ta"].indexOf(segments[1]) === -1) {
+    const url = req.nextUrl.clone();
+    url.pathname = `/${DEFAULT_LOCALE}${pathname}`;
+    return NextResponse.redirect(url);
+  }
 }
-
-export const config = {
-  // Match all paths except _next, api, and files with extensions
-  matcher: ["/((?!_next|api|.*\\..*).*)"],
-};
