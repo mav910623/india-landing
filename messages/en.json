@@ -1,189 +1,245 @@
 {
   "common": {
-    "brand": "NuVantage India",
-    "loading": "Loading…",
-    "save": "Save",
-    "cancel": "Cancel",
-    "close": "Close",
-    "back": "Back",
-    "next": "Next",
-    "continue": "Continue",
-    "optional": "Optional",
-    "copy": "Copy",
-    "copied": "Copied!",
-    "errorGeneric": "Something went wrong. Please try again."
+    "brand": {
+      "name": "NuVantage India",
+      "alt": "NuVantage India"
+    },
+    "languages": {
+      "en": "English",
+      "hi": "Hindi",
+      "ta": "Tamil"
+    },
+    "nav": {
+      "home": "Home",
+      "dashboard": "Team Dashboard",
+      "login": "Login",
+      "register": "Register",
+      "training": "Training",
+      "sponsor": "Sponsor Training",
+      "backDashboard": "← Back to Dashboard"
+    },
+    "actions": {
+      "close": "Close",
+      "expand": "Expand",
+      "collapse": "Collapse",
+      "copy": "Copy",
+      "copied": "Copied!",
+      "learnSponsor": "Learn how to sponsor",
+      "shareWhatsapp": "Share on WhatsApp",
+      "viewAll": "View all",
+      "hide": "Hide",
+      "markDone": "Mark Module as Done",
+      "completed": "Module Completed"
+    },
+    "labels": {
+      "level": "L{level}",
+      "total": "Total",
+      "you": "You",
+      "inviteWithQr": "Invite with QR",
+      "loadingMore": "Loading more…",
+      "locked": "Locked"
+    },
+    "errors": {
+      "unknown": "Something went wrong.",
+      "network": "Network error. Please try again.",
+      "forbidden": "You don't have access.",
+      "notFound": "Not found."
+    }
   },
+
   "login": {
-    "title": "Welcome back to NuVantage India",
+    "title": "Welcome back",
     "subtitle": "Sign in to continue building your India team.",
-    "refBanner": "Referred by {{ref}}. If you don’t have an account yet, create one here.",
+    "referralBanner": {
+      "referredBy": "Referred by {refId}.",
+      "createHere": "create one here"
+    },
     "fields": {
-      "email": "Email address",
+      "email": "Email",
       "password": "Password"
     },
     "placeholders": {
       "email": "you@example.com",
       "password": "Your password"
     },
+    "validations": {
+      "emailInvalid": "Please enter a valid email address.",
+      "passwordRequired": "Please enter your password."
+    },
     "actions": {
-      "showPw": "Show",
-      "hidePw": "Hide",
+      "showPw": "Show password",
+      "hidePw": "Hide password",
       "login": "Login",
+      "loggingIn": "Logging in...",
       "forgotPw": "Forgot password?",
       "createAccount": "Create an account"
     },
-    "notices": {
-      "resetLinkSent": "Password reset link sent. Please check your inbox."
+    "friendlyErrors": {
+      "invalidEmail": "That email address looks invalid.",
+      "userDisabled": "This account has been disabled.",
+      "userNotFound": "No account found with that email.",
+      "wrongPassword": "Incorrect password. Please try again.",
+      "tooMany": "Too many attempts. Please wait a moment and try again.",
+      "network": "Network error. Check your connection and try again.",
+      "generic": "Unable to log in. Please check your email and password."
     },
     "footer": {
       "sponsorNote": "Have a sponsor? Use your referral link to register."
-    },
-    "errors": {
-      "invalidEmail": "Please enter a valid email address.",
-      "missingPassword": "Please enter your password.",
-      "network": "Network error. Check your connection and try again.",
-      "unable": "Unable to log in. Please check your email and password.",
-      "disabled": "This account has been disabled.",
-      "notFound": "No account found with that email.",
-      "wrongPassword": "Incorrect password. Please try again.",
-      "tooMany": "Too many attempts. Please wait a moment and try again."
     }
   },
+
   "register": {
-    "title": "Create your NuVantage India account",
-    "subtitle": "Two quick steps. You’re minutes away from getting started.",
-    "steps": {
-      "verifySponsor": "Step 1 · Verify Sponsor Referral ID",
-      "yourDetails": "Step 2 · Your Details"
-    },
-    "referral": {
-      "label": "Referral ID",
-      "placeholder": "NUXXXXXX",
-      "verify": "Verify",
-      "verified": "Referral verified",
-      "invalid": "Could not verify referral ID. Please check and try again.",
-      "autoCaptured": "Referral captured from link"
-    },
-    "participantType": {
-      "label": "Participant type",
-      "in": "Indian Resident",
-      "nri": "NRI",
-      "oci": "OCI",
-      "intl": "International",
-      "helper": "Choose where you reside for compliance."
+    "title": "Create your account",
+    "subtitle": "Join the India pre-launch and start building your team.",
+    "referralBanner": {
+      "referredBy": "Referred by {refId}"
     },
     "fields": {
       "name": "Full name",
-      "email": "Email address",
+      "email": "Email",
+      "phone": "Phone (optional)",
       "password": "Password",
-      "phone": "Phone number",
-      "countryPhone": "Country",
-      "pan": "PAN",
-      "panHelper": "Enter PAN in uppercase (e.g., ABCDE1234F)",
-      "residenceCountry": "Country of residence",
-      "nuskinId": "Nu Skin ID"
+      "confirmPassword": "Confirm password",
+      "referralId": "Referral ID (optional)"
     },
     "placeholders": {
-      "name": "Your full name",
+      "name": "Your name",
       "email": "you@example.com",
+      "phone": "10-digit number",
       "password": "Create a password",
-      "phone": "10-digit mobile number",
-      "pan": "ABCDE1234F",
-      "residenceCountry": "Select country",
-      "nuskinId": "ID if available"
+      "confirmPassword": "Re-enter password",
+      "referralId": "If you have one"
     },
-    "reminders": {
-      "intlNote": "For NRI / OCI / International: you must be a paid Brand Representative in your country of registration."
+    "validations": {
+      "nameRequired": "Please enter your name.",
+      "emailInvalid": "Please enter a valid email.",
+      "passwordMin": "Use at least 8 characters.",
+      "passwordMatch": "Passwords do not match."
     },
     "actions": {
-      "create": "Create account",
+      "submit": "Register",
+      "submitting": "Registering...",
       "haveAccount": "Already have an account?",
       "login": "Login"
     },
-    "errors": {
-      "missingRequired": "Please fill all required fields.",
-      "invalidEmail": "That email address looks invalid.",
+    "friendlyErrors": {
+      "emailInUse": "This email is already registered.",
       "weakPassword": "Please choose a stronger password.",
-      "invalidPan": "PAN must be 10 characters (e.g., ABCDE1234F).",
-      "invalidPhone": "Please enter a valid phone number.",
-      "mustVerifyRef": "Please verify your Referral ID first."
-    },
-    "success": {
-      "created": "Your account has been created."
+      "generic": "Could not create account. Please try again."
     }
   },
+
   "dashboard": {
     "title": "Team Dashboard",
+    "loading": "Loading dashboard...",
+    "help": "Help",
+    "logout": "Logout",
     "actions": {
-      "help": "Help",
       "logout": "Logout",
-      "learnSponsor": "Learn how to sponsor",
-      "copyInviteLink": "Copy Invite Link",
-      "shareWhatsapp": "Share on WhatsApp",
-      "copyReferralLink": "Copy referral link"
+      "copyInvite": "Copy Invite Link",
+      "shareWhatsapp": "Share on Whatsapp",
+      "viewAllMissions": "View all missions",
+      "hideMissions": "Hide missions"
     },
     "greeting": {
-      "morning": "Good Morning",
-      "afternoon": "Good Afternoon",
-      "evening": "Good Evening"
+      "morning": "Good morning",
+      "afternoon": "Good afternoon",
+      "evening": "Good evening"
     },
     "hero": {
-      "youDefault": "India Founder",
-      "inviteQr": "Invite with QR",
-      "copied": "Referral link copied!",
-      "m1": "Start now: complete <strong>Mission 1</strong> by sponsoring your first <strong>10 India Founders</strong>. <strong class=\"text-blue-700\">{{need}} to go.</strong>",
-      "m2": "Great work! Next is <strong>Mission 2</strong> — grow <strong>3 leaders</strong> in Level 1 to reach <strong>10</strong>. <strong class=\"text-blue-700\">{{need}} more leader{{plural}}.</strong>",
-      "m3": "Momentum! <strong>Mission 3</strong> — multiply into Level 2: help <strong>3 leaders</strong> reach <strong>10</strong>. <strong class=\"text-blue-700\">{{need}} to go.</strong>",
-      "mDone": "You’re building a powerful network. Keep multiplying your leaders."
+      "mission1": "Start now: complete Mission 1 by sponsoring 10 India Founders. {need} to go.",
+      "mission2": "Great work! Mission 2 — help {need} L1 leader(s) reach 10.",
+      "mission3": "Momentum! Mission 3 — support {need} L2 leader(s) to reach 10.",
+      "done": "You’re building a powerful network. Keep multiplying your leaders."
+    },
+    "copySuccess": "Referral link copied!",
+    "sections": {
+      "missions": "Missions",
+      "yourTeam": "Your Team",
+      "levelBreakdown": "Level breakdown",
+      "showBreakdown": "Show level breakdown",
+      "hideBreakdown": "Hide level breakdown"
     },
     "missions": {
-      "viewAll": "View all missions",
-      "hideAll": "Hide missions",
       "m1": {
         "title": "Mission 1: Build",
-        "subtitle": "Sponsor your first 10 India Founders. This unlocks your team’s momentum.",
-        "progress": "{{count}}/10"
+        "subtitle": "Sponsor your first 10 India Founders. This unlocks momentum."
       },
       "m2": {
         "title": "Mission 2: Duplicate",
-        "subtitle": "Grow 3 leaders in Level 1 — help each reach their own 10.",
-        "progress": "{{count}}/3",
-        "locked": "Locked"
+        "subtitle": "Grow 3 leaders in Level 1 — help each reach their own 10."
       },
       "m3": {
         "title": "Mission 3: Multiply",
-        "subtitle": "Repeat in Level 2 — support 3 leaders to reach 10.",
-        "progress": "{{count}}/3",
-        "locked": "Locked"
-      }
+        "subtitle": "Repeat in Level 2 — support 3 leaders to reach 10."
+      },
+      "locked": "Locked"
     },
-    "team": {
-      "title": "Your Team",
-      "total": "Total: {{n}}",
-      "levelTag": "L{{level}}",
-      "sixPlus": "6+",
-      "loading": "Loading…",
-      "expand": "Expand",
-      "collapse": "Collapse",
+    "tree": {
       "whatsapp": "WhatsApp",
-      "loadingMore": "Loading more…"
-    },
-    "help": {
-      "title": "How it works",
-      "items": [
-        "Invite with your QR or the bottom bar.",
-        "New registrations appear in Level 1.",
-        "Finish Mission 1 (10/10), then help 3 L1 leaders reach 10/10 (Mission 2).",
-        "Multiply into Level 2: support 3 leaders to reach 10/10 (Mission 3).",
-        "Tap + to drill into deeper levels. Open a row to view phone & WhatsApp."
-      ],
-      "cta": "Learn how to sponsor"
+      "referralId": "Referral ID",
+      "errorExpand": "Expand/collapse failed.",
+      "errorLoad": "Failed to load team.",
+      "loading": "Loading…"
     },
     "errors": {
       "userNotFound": "User not found.",
-      "profileLoadFailed": "Failed to load profile.",
-      "countsFailed": "Unable to refresh counts.",
-      "expandFailed": "Expand/collapse failed."
+      "profileLoad": "Failed to load profile.",
+      "counts": "Unable to refresh counts."
+    }
+  },
+
+  "train": {
+    "sponsor": {
+      "title": "Learn How to Sponsor",
+      "subtitle": "Quick video + 10 easy steps. Do them, tick them, and you’re rolling.",
+      "progress": "Progress: {pct}%",
+      "completed": "Module Completed",
+      "video": {
+        "title": "Getting Started — Learn How to Sponsor",
+        "whatItCoversTitle": "What this video covers",
+        "whatItCoversBody": "How to start fast, who to talk to, what to say, and how to link people to help so they can say “yes” with confidence."
+      },
+      "stepsTitle": "10 simple steps",
+      "steps": [
+        "Set a simple goal for the next 30 days.",
+        "Write your name list (start with 30–50 people).",
+        "Sort the list: A (hot), B (warm), C (cold).",
+        "Block a daily Power Hour in your calendar.",
+        "Invite simply (two lines max) to meet or watch.",
+        "Present the plan (keep it short and friendly).",
+        "Use A-B-C: Add value, Bridge, Connect to upline or tools.",
+        "Follow up within 24 hours (be kind, be clear).",
+        "Enroll and help their first order.",
+        "Duplicate Day 1 with your new partner."
+      ],
+      "next48": {
+        "title": "Your next 48 hours",
+        "today": "Today",
+        "tomorrow": "Tomorrow",
+        "day3": "Day 3",
+        "todayList": [
+          "Write your first 30 names.",
+          "Sort A / B / C.",
+          "Book a 60-min Power Hour."
+        ],
+        "tomorrowList": [
+          "Invite 5 people (simple two-line invite).",
+          "Lock one presentation slot.",
+          "Tell your upline your plan."
+        ],
+        "day3List": [
+          "Present once (live or video).",
+          "Follow up within 24 hours.",
+          "Enroll one new partner or customer."
+        ],
+        "tip": "Tip: Keep it kind and short. Use A-B-C to connect people to help (upline, meetings, tools)."
+      },
+      "footerNav": {
+        "gettingStarted": "Getting Started",
+        "opportunityProduct": "Opportunity & Product",
+        "abc": "How to do A-B-C"
+      }
     }
   }
 }
