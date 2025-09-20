@@ -1,36 +1,30 @@
-import "./globals.css";
+import "../../app/globals.css";
 import { NextIntlClientProvider } from "next-intl";
 import { notFound } from "next/navigation";
 
-/**
- * Supported locales
- */
+/** Supported locales */
 export const locales = ["en", "hi", "ta"];
 export const defaultLocale = "en";
 
-/**
- * Generate static params for locales (needed by Next.js App Router)
- */
+/** Generate static params for localized routing */
 export function generateStaticParams() {
   return locales.map((locale) => ({ locale }));
 }
 
-/**
- * Root layout
- */
-export default async function RootLayout({ children, params }) {
+export default async function RootLocaleLayout({ children, params }) {
   const locale = params?.locale || defaultLocale;
 
   if (!locales.includes(locale)) {
     notFound();
   }
 
+  // Load messages from root /messages folder
   let messages;
   try {
-    messages = (await import(`../messages/${locale}.json`)).default;
+    messages = (await import(`../../messages/${locale}.json`)).default;
   } catch (error) {
     console.error(`No messages for locale "${locale}"`, error);
-    messages = (await import(`../messages/${defaultLocale}.json`)).default;
+    messages = (await import(`../../messages/${defaultLocale}.json`)).default;
   }
 
   return (
