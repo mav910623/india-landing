@@ -1,1 +1,15 @@
-{ "common": { "ok": "ठीक है" } }
+{
+  "common": {
+    "ok": "OK",
+    "lang": {
+      "language": "भाषा",
+      "open": "भाषा मेनू खोलें",
+      "close": "बंद करें",
+      "english": "अंग्रेज़ी",
+      "hindi": "हिन्दी",
+      "tamil": "तमिल",
+      "tooltip": "भाषा बदलें",
+      "selectorLabel": "भाषा"
+    }
+  }
+}

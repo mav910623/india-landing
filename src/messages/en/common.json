@@ -1,1 +1,15 @@
-{ "common": { "ok": "OK" } }
+{
+  "common": {
+    "ok": "OK",
+    "lang": {
+      "language": "Language",
+      "open": "Open language menu",
+      "close": "Close",
+      "english": "English",
+      "hindi": "Hindi",
+      "tamil": "Tamil",
+      "tooltip": "Change language",
+      "selectorLabel": "Language"
+    }
+  }
+}
