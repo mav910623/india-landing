@@ -1,6 +1,226 @@
 {
+  "dashboard": {
+    "title": "Dashboard",
+    "you": "You",
+    "loading": "Loading…",
+    "help": "Help",
+    "logout": "Log out",
+    "tooltips": {
+      "help": "Open quick help",
+      "logout": "Sign out of your account"
+    },
+    "greeting": {
+      "morning": "Good morning",
+      "afternoon": "Good afternoon",
+      "evening": "Good evening"
+    },
+    "copySuccess": "Copied!",
+    "cta": {
+      "trainingTitle": "Open pre-launch training",
+      "training": "Open Training"
+    },
+    "qr": {
+      "inviteTitle": "Share your referral link",
+      "inviteLabel": "Invite via QR",
+      "alt": "Referral QR code"
+    },
+    "actions": {
+      "copyLink": "Copy link"
+    },
+    "share": {
+      "whatsapp": "Share on WhatsApp",
+      "whatsappText": "Join me on NuVantage India — this is my invite link:"
+    },
+    "missions": {
+      "m1": {
+        "title": "Mission 1: Your First 10",
+        "subtitle": "Personally enroll 10 people (Level 1)"
+      },
+      "m2": {
+        "title": "Mission 2: Help 3 Hit 10",
+        "subtitle": "Get 3 of your Level 1 leaders to reach 10 personal enrollments"
+      },
+      "m3": {
+        "title": "Mission 3: Build L2 Leaders",
+        "subtitle": "Find 3 Level 2 leaders who each reach 10 personal enrollments"
+      },
+      "viewAll": "View all missions",
+      "hideAll": "Hide extra missions",
+      "view": "View all",
+      "hide": "Hide"
+    },
+    "team": {
+      "title": "Your Team",
+      "total": "Total: {n}",
+      "showBreakdown": "Show level breakdown",
+      "hideBreakdown": "Hide level breakdown",
+      "expand": "Expand",
+      "collapse": "Collapse"
+    },
+    "helpTitle": "How this works",
+    "helpClose": "Close help",
+    "close": "Close",
+    "helpSteps": {
+      "1": "Copy your referral link or use the QR to invite.",
+      "2": "Ask new partners to register with your Sponsor ID.",
+      "3": "Follow up and help them invite their first 10.",
+      "4": "Watch the training and complete the checklist.",
+      "5": "Track progress here and celebrate wins."
+    },
+    "hero": {
+      "m1": {
+        "prefix": "Your next goal: invite",
+        "suffix": "more this month to hit Mission 1. You need <strong>{need}</strong>."
+      },
+      "m2": "Help <needStrong>{need}</needStrong> of your L1 leaders reach <s>10</s> each.",
+      "m3": "Find <needStrong>{need}</needStrong> leaders at L2 with <s>10</s> each.",
+      "done": "Fantastic! You’ve completed all three missions."
+    },
+    "errors": {
+      "userNotFound": "We couldn't find your profile.",
+      "profileLoad": "Could not load your profile. Please refresh.",
+      "counts": "Could not load team counts.",
+      "expandCollapse": "Sorry, expand/collapse failed.",
+      "expand": "Sorry, auto-expand failed."
+    }
+  },
+
+  "prelaunch": {
+    "brandAlt": "NuVantage India",
+    "title": "Pre-Launch Training",
+    "subtitle": "Watch the slides, complete the checklist, and mark this module done.",
+    "loading": "Loading…",
+    "chip": {
+      "completed": "Completed",
+      "progress": "{pct}% done"
+    },
+    "slides": {
+      "title": "Training Slides"
+    },
+    "checklist": {
+      "title": "Checklist"
+    },
+    "steps": {
+      "0": "Watch the slide deck above",
+      "1": "List your first 10 invitees",
+      "2": "Send your invite message with your link",
+      "3": "Follow up with each person",
+      "4": "Book a call with your sponsor"
+    },
+    "btn": {
+      "alreadyDoneTitle": "This module is already completed",
+      "markDoneTitle": "Mark the module as completed",
+      "completed": "Module completed",
+      "markDone": "Mark as done"
+    },
+    "savedHint": "Your progress is saved automatically.",
+    "backDashboard": "Back to Dashboard",
+    "postLaunchCta": "Next: Sponsor Training",
+    "errors": {
+      "load": "Could not load your training progress.",
+      "save": "Could not save your progress.",
+      "update": "Could not update completion state."
+    }
+  },
+
+  "prelaunch.gamma": {
+    "title": "Training Slides",
+    "src": "https://gamma.app/embed/vab8y6dpmm9ogzi",
+    "missingSrc": "No slides to show. Please add a <strong>share URL</strong> to the <code>src</code> field.",
+    "tip": "Tip: Use the arrow keys to move between slides."
+  },
+
+  "register": {
+    "title": "Create your account",
+    "subtitle": "Enter your sponsor’s ID and your details to register.",
+    "steps": {
+      "s1": "Verify Sponsor",
+      "s2": "Your Details"
+    },
+    "labels": {
+      "sponsorId": "Sponsor ID (Referral ID)",
+      "uplineConfirmed": "Sponsor confirmed",
+      "yourDetails": "Your details",
+      "status": "Participation status",
+      "residenceCountry": "Country of residence",
+      "nuskinId": "Nu Skin ID"
+    },
+    "status": {
+      "IN": "Indian National",
+      "NRI": "NRI",
+      "OCI": "OCI",
+      "INTL": "International (non-Indian)"
+    },
+    "placeholders": {
+      "sponsorId": "e.g. NUABC12",
+      "fullName": "Full name",
+      "email": "Email address",
+      "phone": "Phone number",
+      "nuskinId": "Your Nu Skin ID",
+      "pan": "PAN (AAAAA-9999-A)",
+      "password": "Create a password"
+    },
+    "hints": {
+      "needSponsor": "Don’t have a Sponsor ID? Ask the person who invited you.",
+      "phoneSavedAs": "Your phone will be saved as",
+      "whatsappReady": "(Good for WhatsApp.)"
+    },
+    "reminders": {
+      "intlPayout": "If you’re <strong>not an Indian National</strong>, commissions are paid via your Nu Skin account in your country of residence."
+    },
+    "pwRules": {
+      "len": "8+ characters",
+      "upper": "1 uppercase letter",
+      "number": "1 number"
+    },
+    "actions": {
+      "checking": "Checking…",
+      "verify": "Verify",
+      "hide": "Hide",
+      "show": "Show",
+      "registering": "Registering…",
+      "registerLogin": "Register & Log in",
+      "back": "Back",
+      "login": "Log in"
+    },
+    "already": "Already have an account?",
+    "notices": {
+      "uplineNotFound": "❌ Sponsor not found. Please check the ID.",
+      "uplineFound": "✅ Sponsor found: {name} ({ref})",
+      "registered": "✅ Registered! Your referral ID is {referralId}."
+    },
+    "errors": {
+      "uplineCheck": "Could not verify the sponsor ID.",
+      "validUplineRequired": "Please verify a valid sponsor first.",
+      "fillAll": "Please fill all required fields.",
+      "emailInvalid": "Please enter a valid email.",
+      "phoneInvalid": "Please enter a valid phone number.",
+      "passwordPolicy": "Password must have 8+ chars, 1 uppercase, and 1 number.",
+      "panInvalid": "Please enter a valid PAN in the format AAAAA9999A.",
+      "selectResidence": "Please select your country of residence.",
+      "nuskinIdRequired": "Nu Skin ID is required for international participants.",
+      "emailExists": "An account with this email already exists.",
+      "phoneExists": "An account with this phone already exists.",
+      "panExists": "This PAN is already used by another account.",
+      "registrationFailed": "Registration failed. Please try again."
+    },
+    "errorsInline": {
+      "emailInline": "This email looks invalid."
+    },
+    "errorsAlt": {
+      "panInline": "PAN format looks invalid."
+    },
+    "errors.emailInline": "This email looks invalid.",
+    "errors.panInline": "PAN format looks invalid.",
+    "hints.panFormat": "Format: <mono>AAAAA9999A</mono>"
+  },
+
   "login": {
     "title": "Welcome back",
+    "subtitle": "Log in to continue.",
+    "referredBy": "Referred by",
+    "createAccountPrompt": "No account yet?",
+    "createHere": "Create one here",
     "fields": {
       "email": "Email",
       "password": "Password"
@@ -12,229 +232,27 @@
     "actions": {
       "showPw": "Show",
       "hidePw": "Hide",
+      "loggingIn": "Logging in…",
       "login": "Log in",
-      "loggingIn": "Signing in…",
       "forgotPw": "Forgot password?",
       "createAccount": "Create account"
     },
-    "footer": {
-      "sponsorNote": "If you were invited, ask your sponsor for their link."
-    }
-  },
-
-  "register": {
-    "title": "India Pre-Registration",
-    "subtitle": "Verify your sponsor and complete your details.",
-    "stepsUi": {
-      "step1": "1 · Sponsor",
-      "step2": "2 · Your details",
-      "step1Label": "Step 1 — Sponsor Referral ID (required)",
-      "step2Label": "Step 2 — Your details",
-      "verify": "Verify",
-      "verifying": "Checking…",
-      "verifyHelp": "You must confirm your sponsor’s Referral ID before proceeding.",
-      "back": "Back"
-    },
-    "upline": {
-      "confirmed": "Upline confirmed",
-      "found": "✅ Upline found: {name} ({referralId})",
-      "notFound": "❌ Upline not found. Please confirm the Referral ID with your sponsor.",
-      "required": "Please enter sponsor Referral ID.",
-      "error": "Error checking upline. Try again."
-    },
-    "fields": {
-      "name": "Full name",
-      "email": "Email address",
-      "phone": "Phone number",
-      "password": "Password",
-      "confirm": "Confirm password",
-      "referralId": "Sponsor Referral ID",
-      "participantType": "Your status",
-      "residenceCountry": "Country of residence",
-      "nuskinId": "Nu Skin ID",
-      "pan": "PAN (AAAAA-9999-A)"
-    },
-    "placeholders": {
-      "name": "Your full name",
-      "email": "Email address",
-      "phone": "Phone number",
-      "referralId": "Enter sponsor Referral ID (e.g. NU12345)",
-      "nuskinId": "Your Nu Skin ID",
-      "pan": "PAN (AAAAA-9999-A)"
-    },
-    "participantOptions": {
-      "IN": "Indian National",
-      "NRI": "NRI",
-      "OCI": "OCI",
-      "INTL": "International Founder"
-    },
-    "reminders": {
-      "intl": "Reminder: You have to be paid as a {bStart}Brand Representative{bEnd} in your country of registration to participate in the India launch."
-    },
-    "phone": {
-      "savePreviewPrefix": "We’ll save your number as",
-      "savePreviewSuffix": "(WhatsApp-ready).",
-      "pickerTitle": "Change country code"
-    },
-    "password": {
-      "show": "Show",
-      "hide": "Hide",
-      "strength": {
-        "ruleLen": "8+ chars",
-        "ruleUpper": "1 uppercase",
-        "ruleNum": "1 number"
-      }
-    },
-    "pan": {
-      "formatHelp": "Format: AAAAA-9999-A",
-      "invalidPattern": "Invalid PAN pattern."
-    },
-    "actions": {
-      "register": "Register & Login",
-      "registering": "Registering…",
-      "haveAccount": "Already have an account?",
-      "login": "Log in"
-    },
     "notices": {
-      "fillAll": "Please fill all required fields.",
-      "invalidEmail": "Please enter a valid email address.",
-      "invalidPhone": "Phone number looks invalid. Please check the country code and number.",
-      "passwordRequirements": "Password must be at least 8 characters, include a capital letter and a number.",
-      "validUplineRequired": "Valid upline required.",
-      "selectResidence": "Please select your country of residence.",
-      "enterNuskinId": "Please enter your Nu Skin ID.",
-      "invalidPan": "PAN format invalid. Expected AAAAA-9999-A.",
-      "emailExists": "❌ This email is already registered.",
-      "phoneExists": "❌ This phone number is already registered.",
-      "panExists": "❌ This PAN is already registered.",
-      "registeredWithRef": "✅ Registered. Your Referral ID: {referralId}",
-      "failed": "❌ {msg}"
-    }
-  },
-
-  "dashboard": {
-    "title": "Team Dashboard",
-    "help": "Help",
-    "logout": "Logout",
-    "loading": "Loading…",
-    "copySuccess": "Referral link copied!",
-    "you": "You",
-    "tooltips": {
-      "help": "How it works",
-      "logout": "Sign out"
-    },
-    "greeting": {
-      "morning": "Good Morning",
-      "afternoon": "Good Afternoon",
-      "evening": "Good Evening"
-    },
-    "cta": {
-      "trainingTitle": "Learn how to sponsor",
-      "training": "Learn to sponsor"
-    },
-    "hero": {
-      "m1": {
-        "prefix": "Start now: complete Mission 1 — sponsor your first",
-        "suffix": "India Founders. {need} to go."
-      },
-      "m2": "Great work! Mission 2 — grow 3 leaders in Level 1 to reach 10. {need} more.",
-      "m3": "Momentum! Mission 3 — multiply into Level 2: help 3 leaders reach 10. {need} to go.",
-      "done": "You’re building a powerful network. Keep multiplying your leaders."
-    },
-    "qr": {
-      "inviteTitle": "Invite with your link",
-      "inviteLabel": "Invite with QR",
-      "alt": "Your referral QR code"
-    },
-    "actions": {
-      "copyLink": "Copy Invite Link"
-    },
-    "share": {
-      "whatsapp": "Share on WhatsApp",
-      "whatsappText": "Join me as an India Founder — use my referral link:"
-    },
-    "missions": {
-      "m1": {
-        "title": "Mission 1: Build",
-        "subtitle": "Sponsor your first 10 India Founders. This unlocks your team’s momentum."
-      },
-      "m2": {
-        "title": "Mission 2: Duplicate",
-        "subtitle": "Grow 3 leaders in Level 1 — help each reach their own 10."
-      },
-      "m3": {
-        "title": "Mission 3: Multiply",
-        "subtitle": "Repeat in Level 2 — support 3 leaders to reach 10."
-      },
-      "viewAll": "View all missions",
-      "hideAll": "Hide missions",
-      "view": "View all missions",
-      "hide": "Hide missions"
-    },
-    "team": {
-      "title": "Your Team",
-      "total": "Total",
-      "hideBreakdown": "Hide breakdown",
-      "showBreakdown": "Show breakdown",
-      "collapse": "Collapse",
-      "expand": "Expand",
-      "whatsapp": "WhatsApp"
-    },
-    "helpTitle": "How it works",
-    "helpClose": "Close help",
-    "close": "Close",
-    "helpSteps": {
-      "1": "Invite with your QR or the bottom bar.",
-      "2": "New registrations appear in Level 1.",
-      "3": "Finish Mission 1 (10/10), then help 3 L1 leaders reach 10/10 (Mission 2).",
-      "4": "Multiply into Level 2: support 3 leaders to reach 10/10 (Mission 3).",
-      "5": "Tap + to drill into deeper levels. Open a row to view phone & WhatsApp."
+      "resetSent": "Password reset email sent."
     },
     "errors": {
-      "userNotFound": "User not found.",
-      "profileLoad": "Failed to load profile.",
-      "counts": "Unable to refresh counts.",
-      "expandCollapse": "Could not expand/collapse.",
-      "expand": "Could not expand."
-    }
-  },
-
-  "prelaunch": {
-    "brandAlt": "NuVantage India",
-    "title": "The India Story (Pre-Launch Module)",
-    "subtitle": "Learn the story, then follow 5 simple steps to spark curiosity and bring prospects into sessions.",
-    "status": {
-      "progress": "Progress: {pct}%",
-      "completed": "Module Completed"
-    },
-    "gamma": {
-      "title": "India Story Slides",
-      "tip": "Tip: Rotate your phone to landscape for larger slides.",
-      "missingSrc": "Missing <code>src</code> for <strong>GammaEmbed</strong>. Add your Gamma share URL.",
-      "src": "https://gamma.app/embed/vab8y6dpmm9ogzi"
-    },
-    "checklist": {
-      "title": "5-Step Pre-Launch",
-      "steps": [
-        "Learn the India Story (slides + 30-second narrative).",
-        "Build and sort your Namelist (20–30 names, A/B/C).",
-        "Create curiosity by sharing what you learned casually.",
-        "Encourage a call or session to hear directly from leaders.",
-        "Follow up within 24 hours and duplicate with new partners."
-      ],
-      "markDone": "Mark Module as Done",
-      "alreadyCompleted": "Module Completed",
-      "autoSave": "Your progress is saved automatically. You can come back anytime."
+      "invalidEmail": "Please enter a valid email.",
+      "invalidEmailForReset": "Enter a valid email to reset your password.",
+      "noPassword": "Please enter your password.",
+      "userDisabled": "This user is disabled.",
+      "userNotFound": "We couldn't find an account with that email.",
+      "wrongPassword": "Incorrect password.",
+      "tooManyRequests": "Too many attempts. Try again later.",
+      "networkError": "Network error. Check your connection.",
+      "generic": "Something went wrong. Please try again."
     },
     "footer": {
-      "back": "← Back to Dashboard",
-      "postLaunch": "Getting Started (Post-Launch)"
-    },
-    "errors": {
-      "load": "Could not load your training progress.",
-      "save": "Could not save. Please try again.",
-      "update": "Could not update. Please try again."
-    },
-    "loading": "Loading…"
+      "sponsorNote": "Don’t have a Sponsor ID? Ask the person who invited you."
+    }
   }
 }
