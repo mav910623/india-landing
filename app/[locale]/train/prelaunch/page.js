@@ -23,7 +23,7 @@ function percentDone(map, total) {
 
 export default function PrelaunchTrainingPage() {
   const t = useTranslations("prelaunch");
-  const tGamma = useTranslations("prelaunch.gamma");
+  const tGamma = useTranslations("prelaunch");
   const locale = useLocale();
   const router = useRouter();
 
@@ -208,8 +208,8 @@ export default function PrelaunchTrainingPage() {
             {t("slides.title")}
           </h2>
           <GammaEmbed
-            src={tGamma("src")}              // locale-specific URL from messages
-            title={tGamma("title")}
+            src={tGamma("gamma.src")}              // locale-specific URL from messages
+            title={tGamma("gamma.title")}
           />
         </section>
 

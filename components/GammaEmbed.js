@@ -1,10 +1,10 @@
+// src/components/GammaEmbed.jsx
 "use client";
 
 import { useEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 
 /**
- * GammaEmbed
  * Responsive iframe wrapper for Gamma decks (or any external slides).
  *
  * Props:
@@ -13,7 +13,7 @@ import { useTranslations } from "next-intl";
  * - ratio (number): aspect ratio width/height (default 16/9)
  */
 export default function GammaEmbed({ src, title, ratio = 16 / 9 }) {
-  const t = useTranslations("prelaunch.gamma");
+  const t = useTranslations("prelaunch"); // <- read gamma.* from prelaunch namespace
   const boxRef = useRef(null);
   const [height, setHeight] = useState(0);
 
@@ -33,9 +33,9 @@ export default function GammaEmbed({ src, title, ratio = 16 / 9 }) {
   if (!src) {
     return (
       <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
-        {t.rich("missingSrc", {
+        {t.rich("gamma.missingSrc", {
           code: (c) => <span className="font-mono">{c}</span>,
-          strong: (c) => <strong>{c}</strong>
+          strong: (c) => <strong>{c}</strong>,
         })}
       </div>
     );
@@ -49,14 +49,14 @@ export default function GammaEmbed({ src, title, ratio = 16 / 9 }) {
       >
         <iframe
           src={src}
-          title={title || t("title")}
+          title={title || t("gamma.title")}
           className="w-full h-full"
           loading="lazy"
           referrerPolicy="no-referrer-when-downgrade"
           allow="fullscreen; clipboard-read; clipboard-write"
         />
       </div>
-      <div className="mt-2 text-xs text-gray-500">{t("tip")}</div>
+      <div className="mt-2 text-xs text-gray-500">{t("gamma.tip")}</div>
     </div>
   );
 }

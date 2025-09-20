@@ -3,15 +3,13 @@ import {getRequestConfig} from 'next-intl/server';
 
 type Messages = Record<string, Record<string, unknown>>;
 
-// ✅ Add "prelaunch.gamma" to this list
 const ALL_NAMESPACES = [
   'common',
   'landing',
   'login',
   'register',
   'dashboard',
-  'prelaunch',
-  'prelaunch.gamma' // <— add this
+  'prelaunch' // <- keep only this for the prelaunch page (no dotted namespaces)
 ];
 
 async function loadMessages(locale: string, namespaces: string[]): Promise<Messages> {
@@ -20,17 +18,17 @@ async function loadMessages(locale: string, namespaces: string[]): Promise<Messa
     namespaces.map(async (ns) => {
       try {
         const mod = await import(`../messages/${locale}/${ns}.json`);
-        out[ns] = (mod as any).default ?? mod;
+        (out as any)[ns] = (mod as any).default ?? mod;
       } catch {
         const fallback = await import(`../messages/en/${ns}.json`);
-        out[ns] = (fallback as any).default ?? fallback;
+        (out as any)[ns] = (fallback as any).default ?? fallback;
       }
     })
   );
   return out;
 }
 
-// next-intl v3 provides only { locale } here
+// next-intl v3: only { locale } is available
 export default getRequestConfig(async ({locale}) => {
   const messages = await loadMessages(locale, ALL_NAMESPACES);
   return {locale, messages};
