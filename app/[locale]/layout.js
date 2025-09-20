@@ -1,10 +1,9 @@
 import "../globals.css";
 import { NextIntlClientProvider } from "next-intl";
 import { notFound } from "next/navigation";
+import { locales, defaultLocale } from "../../i18n";
 
-export const locales = ["en", "hi", "ta"];
-export const defaultLocale = "en";
-
+// Generate static params for localized routes
 export function generateStaticParams() {
   return locales.map((locale) => ({ locale }));
 }
