@@ -9,7 +9,8 @@ import {
   sendPasswordResetEmail,
   onAuthStateChanged,
 } from "firebase/auth";
-import { useTranslations } from "next-intl";
+import { useTranslations, useLocale } from "next-intl";
+import LocaleSwitcher from "@/components/LocaleSwitcher";
 
 /** Utility */
 const isValidEmail = (e) =>
@@ -17,6 +18,7 @@ const isValidEmail = (e) =>
 
 export default function LoginPage() {
   const t = useTranslations("login");
+  const locale = useLocale();
   const router = useRouter();
 
   /** Referral capture */
@@ -31,10 +33,10 @@ export default function LoginPage() {
   /** Redirect if signed in */
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, (u) => {
-      if (u) router.push("/dashboard");
+      if (u) router.push(`/${locale}/dashboard`);
     });
     return () => unsub();
-  }, [router]);
+  }, [router, locale]);
 
   /** State */
   const [email, setEmail] = useState("");
@@ -49,8 +51,8 @@ export default function LoginPage() {
   const emailOk = isValidEmail(email);
   const canSubmit = emailOk && password && !loading;
   const registerHref = refId
-    ? `/register?ref=${encodeURIComponent(refId)}`
-    : "/register";
+    ? `/${locale}/register?ref=${encodeURIComponent(refId)}`
+    : `/${locale}/register`;
 
   /** Error translation */
   const friendlyError = (codeOrMsg) => {
@@ -85,7 +87,7 @@ export default function LoginPage() {
     setLoading(true);
     try {
       await signInWithEmailAndPassword(auth, email.trim(), password);
-      router.push("/dashboard");
+      router.push(`/${locale}/dashboard`);
     } catch (err) {
       setError(friendlyError(err.code || err.message));
     } finally {
@@ -111,7 +113,12 @@ export default function LoginPage() {
 
   /** UI */
   return (
-    <div className="min-h-screen bg-gradient-to-b from-sky-50 via-white to-white">
+    <div className="min-h-screen bg-gradient-to-b from-sky-50 via-white to-white relative">
+      {/* Permanent language selector (top-right) */}
+      <div className="absolute top-3 right-3 sm:top-6 sm:right-6">
+        <LocaleSwitcher mode="inline" />
+      </div>
+
       {/* Background ornaments */}
       <div className="pointer-events-none fixed inset-0 -z-10">
         <div className="absolute -top-24 -left-16 h-72 w-72 rounded-full bg-blue-100/40 blur-3xl" />
