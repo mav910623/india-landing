@@ -40,3 +40,30 @@
     }
   }
 }
+
+{
+  "dashboard": {
+    "title": "Team Dashboard",
+    "help": "Help",
+    "logout": "Logout",
+    "loading": "Loading…",
+    "copySuccess": "Referral link copied!",
+    "greeting": {
+      "morning": "Good Morning",
+      "afternoon": "Good Afternoon",
+      "evening": "Good Evening"
+    },
+    "errors": {
+      "userNotFound": "User not found.",
+      "profileLoad": "Failed to load profile.",
+      "counts": "Unable to refresh counts."
+    },
+    "hero": {
+      "mission1": "Start now: complete Mission 1 by sponsoring your first 10 India Founders. {need} to go.",
+      "mission2": "Great work! Next is Mission 2 — grow 3 leaders in Level 1 to reach 10. {need} more to go.",
+      "mission3": "Momentum! Mission 3 — help 3 leaders in Level 2 reach 10. {need} to go.",
+      "done": "You’re building a powerful network. Keep multiplying your leaders."
+    }
+  }
+}
+
