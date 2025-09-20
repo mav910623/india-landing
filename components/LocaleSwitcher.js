@@ -1,134 +1,130 @@
 "use client";
 
 import {useEffect, useMemo, useState} from "react";
+import {useLocale, useMessages} from "next-intl";
 import {usePathname, useRouter, useSearchParams} from "next/navigation";
-import {useLocale, useTranslations} from "next-intl";
 
-/**
- * Floating Locale Switcher
- *
- * Visibility controls (any of these will hide it):
- *  - Build-time:   NEXT_PUBLIC_SHOW_LOCALE_SWITCHER=false
- *  - Runtime:      ?hideLocale=1
- *  - One-click:    close (×) button — persists in localStorage
- *
- * Re-enable after closing:
- *  - Run in console: localStorage.removeItem('hideLocaleSwitcher')
- *  - Or add ?hideLocale=0 to any URL
- */
-export default function LocaleSwitcher() {
+const STORAGE_KEY = "nv.lang.hidden";
+
+function getMsg(messages, path, fallback) {
+  // Safe, no exceptions if the key is missing
+  try {
+    const parts = path.split(".");
+    let cur = messages;
+    for (const p of parts) cur = cur?.[p];
+    if (typeof cur === "string") return cur;
+  } catch {}
+  return fallback;
+}
+
+export default function LocaleSwitcher({floating = true, align = "right"}) {
   const router = useRouter();
   const pathname = usePathname() || "/";
-  const params = useSearchParams();
+  const searchParams = useSearchParams();
   const locale = useLocale();
-  const t = useTranslations("common.lang");
+  const messages = useMessages();
 
-  // Labels with safe fallbacks so we never break UI if a key is missing
-  const locales = useMemo(
-    () => [
-      {code: "en", label: safeT(t, "en", "English")},
-      {code: "hi", label: safeT(t, "hi", "Hindi")},
-      {code: "ta", label: safeT(t, "ta", "Tamil")}
-    ],
-    [t]
-  );
+  const [hidden, setHidden] = useState(false);
 
-  const [visible, setVisible] = useState(false);
-
+  // Read initial hidden state
   useEffect(() => {
-    // 1) Build-time default via ENV (defaults true)
-    const envDefault =
-      (process.env.NEXT_PUBLIC_SHOW_LOCALE_SWITCHER ?? "true").toString().toLowerCase() !== "false";
-
-    // 2) LocalStorage override
-    const lsHide = typeof window !== "undefined" && localStorage.getItem("hideLocaleSwitcher") === "1";
-
-    // 3) Query param override
-    let qpOverride = null;
-    if (typeof window !== "undefined") {
-      const sp = new URLSearchParams(window.location.search);
-      const hv = sp.get("hideLocale");
-      if (hv === "1") qpOverride = false; // means hide
-      if (hv === "0") qpOverride = true;  // means show + clear LS
-      if (hv === "0") localStorage.removeItem("hideLocaleSwitcher");
-      if (hv === "1") localStorage.setItem("hideLocaleSwitcher", "1");
-    }
-
-    const finalVisible = qpOverride ?? (envDefault && !lsHide);
-    setVisible(finalVisible);
+    try {
+      setHidden(localStorage.getItem(STORAGE_KEY) === "1");
+    } catch {}
   }, []);
 
-  if (!visible) return null;
+  // Escape hatches: ?showLang=1 or Alt+L to force-show
+  useEffect(() => {
+    if (searchParams?.get("showLang") === "1") {
+      try { localStorage.removeItem(STORAGE_KEY); } catch {}
+      setHidden(false);
+    }
+    const onKey = (e) => {
+      if (e.altKey && (e.key === "l" || e.key === "L")) {
+        try { localStorage.removeItem(STORAGE_KEY); } catch {}
+        setHidden(false);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [searchParams]);
 
-  function switchTo(target) {
-    if (!target || target === locale) return;
-    const newPath = buildPathWithLocale(pathname, target);
-    const qs = params?.toString();
-    router.push(qs ? `${newPath}?${qs}` : newPath);
+  const locales = useMemo(() => ["en", "hi", "ta"], []);
+  const labels = {
+    en: getMsg(messages, "common.locale.en", "English"),
+    hi: getMsg(messages, "common.locale.hi", "हिन्दी"),
+    ta: getMsg(messages, "common.locale.ta", "தமிழ்")
+  };
+  const title = getMsg(messages, "common.switcher.title", "Language");
+  const hideText = getMsg(messages, "common.switcher.hide", "Hide");
+
+  function createNextPath(target) {
+    const seg = pathname.split("/");
+    if (["en", "hi", "ta"].includes(seg[1])) seg[1] = target;
+    else seg.splice(1, 0, target);
+    const qs = searchParams?.toString();
+    return qs ? `${seg.join("/")}?${qs}` : seg.join("/");
   }
 
-  function handleClose() {
-    try {
-      localStorage.setItem("hideLocaleSwitcher", "1");
-    } catch {}
-    setVisible(false);
+  function switchTo(next) {
+    router.push(createNextPath(next));
   }
 
-  return (
-    <div
-      role="group"
-      aria-label={safeT(t, "label", "Language")}
-      className="fixed z-50 bottom-3 right-3 rounded-2xl border border-gray-200 bg-white/95 backdrop-blur px-2 py-1 shadow-lg flex items-center gap-1 text-xs"
-    >
-      {/* Close */}
-      <button
-        aria-label={safeT(t, "hide", "Hide")}
-        title={safeT(t, "hide", "Hide")}
-        onClick={handleClose}
-        className="rounded-lg px-2 py-1 text-gray-500 hover:bg-gray-100"
-      >
-        ×
-      </button>
-
-      {locales.map((l) => {
-        const active = l.code === locale;
-        return (
+  if (!floating) {
+    // Inline variant (e.g., in a header)
+    return (
+      <div className="inline-flex items-center gap-1">
+        {locales.map((l) => (
           <button
-            key={l.code}
-            onClick={() => switchTo(l.code)}
-            aria-current={active ? "true" : "false"}
-            title={`${safeT(t, "label", "Language")}: ${l.label}`}
-            className={[
-              "rounded-xl px-2.5 py-1 transition",
-              active
-                ? "bg-blue-600 text-white shadow-sm"
-                : "bg-white text-gray-800 hover:bg-gray-50 border border-gray-200"
-            ].join(" ")}
+            key={l}
+            onClick={() => switchTo(l)}
+            aria-pressed={locale === l}
+            className={`px-2 py-1 rounded border text-sm ${
+              locale === l
+                ? "bg-blue-600 border-blue-600 text-white"
+                : "bg-gray-100 border-gray-200 text-gray-800 hover:bg-gray-200"
+            }`}
           >
-            {l.label}
+            {labels[l]}
           </button>
-        );
-      })}
+        ))}
+      </div>
+    );
+  }
+
+  if (hidden) return null;
+
+  // Floating variant
+  return (
+    <div className={`fixed ${align === "left" ? "left-3" : "right-3"} bottom-3 z-[60]`}>
+      <div className="rounded-2xl border border-gray-200 bg-white/90 backdrop-blur px-2 py-2 shadow-lg flex items-center gap-1">
+        <span className="text-xs text-gray-600 px-1">{title}:</span>
+        {locales.map((l) => (
+          <button
+            key={l}
+            onClick={() => switchTo(l)}
+            aria-pressed={locale === l}
+            className={`text-xs px-2 py-1 rounded-lg border ${
+              locale === l
+                ? "border-blue-600 bg-blue-600 text-white"
+                : "border-gray-200 bg-gray-50 hover:bg-gray-100 text-gray-800"
+            }`}
+          >
+            {labels[l]}
+          </button>
+        ))}
+        <button
+          onClick={() => {
+            try { localStorage.setItem(STORAGE_KEY, "1"); } catch {}
+            setHidden(true);
+          }}
+          title={hideText}
+          aria-label={hideText}
+          className="ml-1 inline-flex h-6 w-6 items-center justify-center rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-100"
+        >
+          ×
+        </button>
+      </div>
     </div>
   );
-}
-
-/* Helpers */
-function buildPathWithLocale(pathname, target) {
-  const parts = String(pathname || "/").split("/").filter(Boolean);
-  if (parts.length === 0) return `/${target}`;
-  const first = parts[0];
-  if (["en", "hi", "ta"].includes(first)) {
-    parts[0] = target;
-    return `/${parts.join("/")}`;
-  }
-  return `/${target}/${parts.join("/")}`;
-}
-function safeT(t, key, fallback) {
-  try {
-    const val = t(key);
-    return typeof val === "string" ? val : fallback;
-  } catch {
-    return fallback;
-  }
 }

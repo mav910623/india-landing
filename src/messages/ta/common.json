@@ -1,15 +1,15 @@
 {
   "common": {
-    "ok": "OK",
-    "lang": {
-      "language": "भाषा",
-      "open": "भाषा मेनू खोलें",
-      "close": "बंद करें",
-      "english": "अंग्रेज़ी",
-      "hindi": "हिन्दी",
-      "tamil": "तमिल",
-      "tooltip": "भाषा बदलें",
-      "selectorLabel": "भाषा"
+    "ok": "சரி",
+    "switcher": {
+      "title": "மொழி",
+      "hide": "மறை",
+      "show": "மொழியை காட்டு"
+    },
+    "locale": {
+      "en": "English",
+      "hi": "ஹிந்தி",
+      "ta": "தமிழ்"
     }
   }
 }
