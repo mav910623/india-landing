@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useParams } from "next/navigation";
 import Image from "next/image";
+import { useTranslations } from "next-intl";
 import { auth, db } from "@/lib/firebase";
 import { createUserWithEmailAndPassword, updateProfile } from "firebase/auth";
 import {
@@ -60,8 +61,7 @@ function constrainPanCore(core) {
   const raw = unmaskPan(core).slice(0, 10);
   let out = "";
   for (let i = 0; i < raw.length && out.length < 10; i++) {
-    const ch = raw[i],
-      idx = out.length;
+    const ch = raw[i], idx = out.length;
     if (idx <= 4 || idx === 9) {
       if (/[A-Z]/.test(ch)) out += ch;
     } else {
@@ -91,17 +91,14 @@ function toE164(dial, local) {
 }
 function flagFromCC(cc) {
   if (!cc || cc.length !== 2) return "🏳️";
-  const A = 0x1f1e6;
-  const a = "A".charCodeAt(0);
+  const A = 0x1f1e6, a = "A".charCodeAt(0);
   return String.fromCodePoint(...cc.toUpperCase().split("").map((c) => A + (c.charCodeAt(0) - a)));
 }
 
 /** =========================================================
- *  Small, accessible custom picker for phone country
- *  - List shows: FLAG + Country name
- *  - Collapsed trigger shows: FLAG + dial code (compact)
+ *  Small, accessible custom picker for phone country (i18n)
  * ======================================================== */
-function PhoneCountryPicker({ countries, value, onChange }) {
+function PhoneCountryPicker({ countries, value, onChange, t }) {
   const [open, setOpen] = useState(false);
   const rootRef = useRef(null);
 
@@ -125,33 +122,23 @@ function PhoneCountryPicker({ countries, value, onChange }) {
 
   return (
     <div ref={rootRef} className="relative">
-      {/* Trigger */}
       <button
         type="button"
         aria-haspopup="listbox"
         aria-expanded={open}
         onClick={() => setOpen((v) => !v)}
         className="inline-flex items-center gap-2 rounded-2xl border border-gray-200 bg-white px-3 py-3 text-sm text-gray-900 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
-        title="Change country code"
+        title={t("a11y.changeCountry")}
       >
         <span className="text-base leading-none">{current?.flag || "🌍"}</span>
         <span className="font-mono text-gray-800">{current?.dial || "+.."}</span>
-        <svg
-          aria-hidden="true"
-          className={`h-4 w-4 text-gray-500 transition-transform ${open ? "rotate-180" : ""}`}
-          viewBox="0 0 20 20"
-          fill="currentColor"
-        >
+        <svg aria-hidden="true" className={`h-4 w-4 text-gray-500 transition-transform ${open ? "rotate-180" : ""}`} viewBox="0 0 20 20" fill="currentColor">
           <path d="M5.23 7.21a.75.75 0 011.06.02L10 10.585l3.71-3.355a.75.75 0 011.02 1.1l-4.2 3.8a.75.75 0 01-1.02 0l-4.2-3.8a.75.75 0 01-.02-1.06z" />
         </svg>
       </button>
 
-      {/* Listbox */}
       {open && (
-        <div
-          role="listbox"
-          className="absolute z-50 mt-2 w-64 max-h-64 overflow-auto rounded-2xl border border-gray-200 bg-white p-1 shadow-lg"
-        >
+        <div role="listbox" className="absolute z-50 mt-2 w-64 max-h-64 overflow-auto rounded-2xl border border-gray-200 bg-white p-1 shadow-lg">
           {countries.map((c) => {
             const selected = current?.cc === c.cc;
             return (
@@ -160,10 +147,7 @@ function PhoneCountryPicker({ countries, value, onChange }) {
                 type="button"
                 role="option"
                 aria-selected={selected}
-                onClick={() => {
-                  onChange?.(c);
-                  setOpen(false);
-                }}
+                onClick={() => { onChange?.(c); setOpen(false); }}
                 className={`w-full text-left rounded-xl px-2 py-2 text-sm hover:bg-gray-50 ${
                   selected ? "bg-blue-50" : ""
                 }`}
@@ -184,23 +168,21 @@ function PhoneCountryPicker({ countries, value, onChange }) {
  * ======================================================== */
 export default function RegisterPage() {
   const router = useRouter();
+  const { locale = "en" } = useParams();
+  const t = useTranslations("register");
 
   /** ---------- Countries (runtime-built) ---------- */
   const [countries, setCountries] = useState([]);
-  const [country, setCountry] = useState(null); // for phone calling code
-  const [residence, setResidence] = useState(null); // for international types
+  const [country, setCountry] = useState(null);
+  const [residence, setResidence] = useState(null);
 
   useEffect(() => {
     try {
-      const regionNames = new Intl.DisplayNames(["en"], { type: "region" });
+      const regionNames = new Intl.DisplayNames([locale], { type: "region" });
       const list = getCountries()
         .map((cc) => {
           let dial = "";
-          try {
-            dial = `+${getCountryCallingCode(cc)}`;
-          } catch {
-            dial = "";
-          }
+          try { dial = `+${getCountryCallingCode(cc)}`; } catch { dial = ""; }
           const name = regionNames.of(cc) || cc;
           return { cc, name, dial, flag: flagFromCC(cc) };
         })
@@ -213,11 +195,9 @@ export default function RegisterPage() {
       setResidence(list[0] || india || null);
     } catch (e) {
       console.error("Building country list failed:", e);
-      setCountries([]);
-      setCountry(null);
-      setResidence(null);
+      setCountries([]); setCountry(null); setResidence(null);
     }
-  }, []);
+  }, [locale]);
 
   /** ---------- Steps & Sponsor ---------- */
   const [step, setStep] = useState(1);
@@ -226,7 +206,6 @@ export default function RegisterPage() {
   const [checkingUpline, setCheckingUpline] = useState(false);
   const [refLocked, setRefLocked] = useState(false);
 
-  // Capture ?ref=... (no useSearchParams → no Suspense requirement)
   useEffect(() => {
     if (typeof window !== "undefined") {
       const p = new URLSearchParams(window.location.search);
@@ -242,16 +221,16 @@ export default function RegisterPage() {
             const snap = await getDocs(qy);
             if (snap.empty) {
               setUpline(null);
-              setNotice("❌ Upline not found. Please confirm the Referral ID with your sponsor.");
+              setNotice(t("notices.uplineNotFound"));
             } else {
               const sDoc = snap.docs[0];
               setUpline({ id: sDoc.id, ...sDoc.data() });
-              setNotice(`✅ Upline found: ${sDoc.data().name} (${sDoc.data().referralId})`);
+              setNotice(t("notices.uplineFound", { name: sDoc.data().name, ref: sDoc.data().referralId }));
               setStep(2);
             }
           } catch (err) {
             console.error("Upline lookup error (auto):", err);
-            setNotice("Error checking upline. Try again.");
+            setNotice(t("errors.uplineCheck"));
             setUpline(null);
           } finally {
             setCheckingUpline(false);
@@ -259,7 +238,7 @@ export default function RegisterPage() {
         })();
       }
     }
-  }, []);
+  }, [t]);
 
   /** ---------- Form fields ---------- */
   const [name, setName] = useState("");
@@ -301,7 +280,7 @@ export default function RegisterPage() {
     setNotice("");
     const id = String(uplineInput || "").trim().toUpperCase();
     if (!id) {
-      setNotice("Please enter sponsor Referral ID.");
+      setNotice(t("notices.enterSponsor"));
       return;
     }
     setCheckingUpline(true);
@@ -310,16 +289,16 @@ export default function RegisterPage() {
       const snap = await getDocs(qy);
       if (snap.empty) {
         setUpline(null);
-        setNotice("❌ Upline not found. Please confirm the Referral ID with your sponsor.");
+        setNotice(t("notices.uplineNotFound"));
         return;
       }
       const sDoc = snap.docs[0];
       setUpline({ id: sDoc.id, ...sDoc.data() });
-      setNotice(`✅ Upline found: ${sDoc.data().name} (${sDoc.data().referralId})`);
+      setNotice(t("notices.uplineFound", { name: sDoc.data().name, ref: sDoc.data().referralId }));
       setStep(2);
     } catch (err) {
       console.error("Upline lookup error:", err);
-      setNotice("Error checking upline. Try again.");
+      setNotice(t("errors.uplineCheck"));
       setUpline(null);
     } finally {
       setCheckingUpline(false);
@@ -331,7 +310,7 @@ export default function RegisterPage() {
     setNotice("");
 
     if (!upline?.id) {
-      setNotice("Valid upline required.");
+      setNotice(t("errors.validUplineRequired"));
       setStep(1);
       return;
     }
@@ -344,35 +323,34 @@ export default function RegisterPage() {
     const panNorm = isInternational ? "" : panCore;
 
     if (!nameNorm || !emailNorm || !rawPhone || !password) {
-      setNotice("Please fill all required fields.");
+      setNotice(t("errors.fillAll"));
       return;
     }
     if (!emailValid) {
-      setNotice("Please enter a valid email address.");
+      setNotice(t("errors.emailInvalid"));
       return;
     }
     if (!e164.startsWith("+")) {
-      setNotice("Phone number looks invalid. Please check the country code and number.");
+      setNotice(t("errors.phoneInvalid"));
       return;
     }
     if (!pwOk) {
-      setNotice("Password must be at least 8 characters, include a capital letter and a number.");
+      setNotice(t("errors.passwordPolicy"));
       return;
     }
 
-    // Conditional requirements
     if (!isInternational) {
       if (!isValidPANCore(panNorm)) {
-        setNotice("PAN format invalid. Expected AAAAA-9999-A.");
+        setNotice(t("errors.panInvalid"));
         return;
       }
     } else {
       if (!residence?.cc) {
-        setNotice("Please select your country of residence.");
+        setNotice(t("errors.selectResidence"));
         return;
       }
       if (!nuskinId.trim()) {
-        setNotice("Please enter your Nu Skin ID.");
+        setNotice(t("errors.nuskinIdRequired"));
         return;
       }
     }
@@ -381,47 +359,39 @@ export default function RegisterPage() {
     let createdAuthUser = null;
 
     try {
-      // Email uniqueness
       const emailQ = query(collection(db, "users"), where("email", "==", emailNorm), limit(1));
       const emailSnap = await getDocs(emailQ);
       if (!emailSnap.empty) {
         setRegistering(false);
-        setNotice("❌ This email is already registered.");
+        setNotice(t("errors.emailExists"));
         return;
       }
 
-      // Phone uniqueness
       const phoneQ = query(collection(db, "users"), where("phone", "==", e164), limit(1));
       const phoneSnap = await getDocs(phoneQ);
       if (!phoneSnap.empty) {
         setRegistering(false);
-        setNotice("❌ This phone number is already registered.");
+        setNotice(t("errors.phoneExists"));
         return;
       }
 
-      // PAN uniqueness (India only)
       if (!isInternational) {
         const panQ = query(collection(db, "users"), where("pan", "==", panNorm), limit(1));
         const panSnap = await getDocs(panQ);
         if (!panSnap.empty) {
           setRegistering(false);
-          setNotice("❌ This PAN is already registered.");
+          setNotice(t("errors.panExists"));
           return;
         }
       }
 
-      // Auth
       const userCredential = await createUserWithEmailAndPassword(auth, emailNorm, password);
       createdAuthUser = userCredential.user;
       const uid = createdAuthUser.uid;
-      try {
-        await updateProfile(createdAuthUser, { displayName: nameNorm });
-      } catch {}
+      try { await updateProfile(createdAuthUser, { displayName: nameNorm }); } catch {}
 
-      // Referral ID
       const referralId = await generateUniqueReferralId(uid);
 
-      // Atomic write
       const batch = writeBatch(db);
       const userRef = doc(db, "users", uid);
       const payload = {
@@ -460,8 +430,8 @@ export default function RegisterPage() {
 
       await batch.commit();
 
-      setNotice(`✅ Registered. Your Referral ID: ${referralId}`);
-      router.push("/dashboard");
+      setNotice(t("notices.registered", { referralId }));
+      router.push(`/${locale}/dashboard`);
 
       // Reset (best effort)
       setStep(1);
@@ -477,10 +447,8 @@ export default function RegisterPage() {
       setNuskinId("");
     } catch (err) {
       console.error("Registration error:", err);
-      try {
-        if (createdAuthUser?.delete) await createdAuthUser.delete();
-      } catch {}
-      setNotice(`❌ ${err?.message || "Registration failed. Try again."}`);
+      try { if (createdAuthUser?.delete) await createdAuthUser.delete(); } catch {}
+      setNotice(`❌ ${err?.message || t("errors.registrationFailed")}`);
     } finally {
       setRegistering(false);
     }
@@ -511,9 +479,9 @@ export default function RegisterPage() {
             />
           </div>
           <h1 className="mt-4 text-[22px] sm:text-3xl font-semibold tracking-tight text-gray-900">
-            India Pre-Registration
+            {t("title")}
           </h1>
-          <p className="mt-1 text-sm text-gray-600">Verify your sponsor and complete your details.</p>
+          <p className="mt-1 text-sm text-gray-600">{t("subtitle")}</p>
         </div>
 
         <div className="rounded-3xl border border-gray-100/80 bg-white/80 backdrop-blur-sm p-6 sm:p-7 shadow-xl">
@@ -538,7 +506,7 @@ export default function RegisterPage() {
                 step === 1 ? "border-blue-200 bg-blue-50 text-blue-700" : "border-gray-200 bg-gray-50"
               }`}
             >
-              1 · Sponsor
+              {t("steps.s1")}
             </span>
             <span>→</span>
             <span
@@ -546,21 +514,21 @@ export default function RegisterPage() {
                 step === 2 ? "border-blue-200 bg-blue-50 text-blue-700" : "border-gray-200 bg-gray-50"
               }`}
             >
-              2 · Your details
+              {t("steps.s2")}
             </span>
           </div>
 
           {step === 1 && (
             <section>
               <label className="block text-sm font-medium text-gray-800 mb-2">
-                Step 1 — Sponsor Referral ID (required)
+                {t("labels.sponsorId")}
               </label>
 
               <div className="flex gap-2">
                 <input
                   value={uplineInput}
                   onChange={(e) => setUplineInput(e.target.value.toUpperCase())}
-                  placeholder="Enter sponsor Referral ID (e.g. NU12345)"
+                  placeholder={t("placeholders.sponsorId")}
                   className="flex-1 rounded-2xl border border-gray-200 px-3 py-3 text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
                   disabled={refLocked}
                 />
@@ -569,12 +537,12 @@ export default function RegisterPage() {
                   disabled={checkingUpline}
                   className="rounded-2xl bg-blue-600 text-white px-4 py-3 text-sm font-semibold hover:bg-blue-700 active:scale-[0.99] transition disabled:opacity-60"
                 >
-                  {checkingUpline ? "Checking…" : "Verify"}
+                  {checkingUpline ? t("actions.checking") : t("actions.verify")}
                 </button>
               </div>
 
               <p className="mt-2 text-xs text-gray-500">
-                You must confirm your sponsor’s Referral ID before proceeding.
+                {t("hints.needSponsor")}
               </p>
             </section>
           )}
@@ -582,28 +550,32 @@ export default function RegisterPage() {
           {step === 2 && upline && (
             <section>
               <div className="mb-4">
-                <div className="text-xs text-gray-500">Upline confirmed</div>
+                <div className="text-xs text-gray-500">{t("labels.uplineConfirmed")}</div>
                 <div className="text-base sm:text-lg font-medium text-gray-900">
                   {upline.name}{" "}
                   <span className="text-xs sm:text-sm text-gray-500 ml-1">({upline.referralId})</span>
                 </div>
               </div>
 
-              <label className="block text-sm font-medium text-gray-800 mb-3">Step 2 — Your details</label>
+              <label className="block text-sm font-medium text-gray-800 mb-3">
+                {t("labels.yourDetails")}
+              </label>
 
               {/* Participant Type */}
               <div className="mb-3 grid grid-cols-1 sm:grid-cols-3 gap-2">
                 <div className="sm:col-span-3">
-                  <label className="block text-xs font-medium text-gray-700 mb-1">Your status</label>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">
+                    {t("labels.status")}
+                  </label>
                   <select
                     value={participantType}
                     onChange={(e) => setParticipantType(e.target.value)}
                     className="w-full rounded-2xl border border-gray-200 px-3 py-3 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
                   >
-                    <option value="IN">Indian National</option>
-                    <option value="NRI">NRI</option>
-                    <option value="OCI">OCI</option>
-                    <option value="INTL">International Founder</option>
+                    <option value="IN">{t("status.IN")}</option>
+                    <option value="NRI">{t("status.NRI")}</option>
+                    <option value="OCI">{t("status.OCI")}</option>
+                    <option value="INTL">{t("status.INTL")}</option>
                   </select>
                 </div>
               </div>
@@ -611,8 +583,9 @@ export default function RegisterPage() {
               {/* Reminder for international */}
               {isInternational && (
                 <div className="mb-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-[13px] text-amber-900">
-                  Reminder: You have to be paid as a <strong>Brand Representative</strong> in your country of
-                  registration to participate in the India launch.
+                  {t.rich("reminders.intlPayout", {
+                    strong: (chunks) => <strong>{chunks}</strong>,
+                  })}
                 </div>
               )}
 
@@ -620,7 +593,7 @@ export default function RegisterPage() {
                 <input
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  placeholder="Full name"
+                  placeholder={t("placeholders.fullName")}
                   className="w-full rounded-2xl border border-gray-200 px-3 py-3 text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
 
@@ -629,7 +602,7 @@ export default function RegisterPage() {
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     onBlur={() => setEmailTouched(true)}
-                    placeholder="Email address"
+                    placeholder={t("placeholders.email")}
                     type="email"
                     className={`w-full rounded-2xl border px-3 py-3 text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 ${
                       !emailTouched || emailValid
@@ -638,7 +611,7 @@ export default function RegisterPage() {
                     }`}
                   />
                   {emailTouched && !emailValid && (
-                    <p className="mt-1 text-xs text-red-600">Please enter a valid email.</p>
+                    <p className="mt-1 text-xs text-red-600">{t("errors.emailInline")}</p>
                   )}
                 </div>
 
@@ -649,21 +622,22 @@ export default function RegisterPage() {
                       countries={countries}
                       value={country}
                       onChange={(c) => setCountry(c)}
+                      t={(key) => t(key)}
                     />
                     <input
                       value={phoneLocal}
                       onChange={(e) => setPhoneLocal(e.target.value)}
                       inputMode="tel"
-                      placeholder="Phone number"
+                      placeholder={t("placeholders.phone")}
                       className="flex-1 rounded-2xl border border-gray-200 px-3 py-3 text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
                     />
                   </div>
                   <p className="mt-2 text-xs text-gray-500">
-                    We’ll save your number as{" "}
+                    {t("hints.phoneSavedAs")}{" "}
                     <span className="font-mono text-gray-700">
                       {toE164(country?.dial, phoneLocal) || `${country?.dial || "+"}…`}
                     </span>{" "}
-                    (WhatsApp-ready).
+                    {t("hints.whatsappReady")}
                   </p>
                 </div>
 
@@ -671,7 +645,9 @@ export default function RegisterPage() {
                 {isInternational && (
                   <>
                     <div>
-                      <label className="block text-xs font-medium text-gray-700 mb-1">Country of residence</label>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">
+                        {t("labels.residenceCountry")}
+                      </label>
                       <select
                         value={residence?.cc || ""}
                         onChange={(e) => {
@@ -689,11 +665,13 @@ export default function RegisterPage() {
                     </div>
 
                     <div>
-                      <label className="block text-xs font-medium text-gray-700 mb-1">Nu Skin ID</label>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">
+                        {t("labels.nuskinId")}
+                      </label>
                       <input
                         value={nuskinId}
                         onChange={(e) => setNuskinId(e.target.value)}
-                        placeholder="Your Nu Skin ID"
+                        placeholder={t("placeholders.nuskinId")}
                         className="w-full rounded-2xl border border-gray-200 px-3 py-3 text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
                       />
                     </div>
@@ -706,7 +684,7 @@ export default function RegisterPage() {
                     <input
                       value={panInput}
                       onChange={(e) => onPanChange(e.target.value)}
-                      placeholder="PAN (AAAAA-9999-A)"
+                      placeholder={t("placeholders.pan")}
                       className={`w-full rounded-2xl border px-3 py-3 text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 ${
                         !panCore || isValidPANCore(panCore)
                           ? "border-gray-200 focus:ring-blue-500"
@@ -714,10 +692,10 @@ export default function RegisterPage() {
                       }`}
                     />
                     <p className="mt-1 text-xs text-gray-500">
-                      Format: <span className="font-mono">AAAAA-9999-A</span>
+                      {t.rich("hints.panFormat", { mono: (c) => <span className="font-mono">{c}</span> })}
                     </p>
                     {panCore && !isValidPANCore(panCore) && (
-                      <p className="mt-1 text-xs text-red-600">Invalid PAN pattern.</p>
+                      <p className="mt-1 text-xs text-red-600">{t("errors.panInline")}</p>
                     )}
                   </div>
                 )}
@@ -728,7 +706,7 @@ export default function RegisterPage() {
                     <input
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
-                      placeholder="Password"
+                      placeholder={t("placeholders.password")}
                       type={pwVisible ? "text" : "password"}
                       className="w-full rounded-2xl border border-gray-200 px-3 py-3 pr-24 text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
                     />
@@ -737,7 +715,7 @@ export default function RegisterPage() {
                       onClick={() => setPwVisible((v) => !v)}
                       className="absolute right-2 top-1/2 -translate-y-1/2 rounded-xl border border-gray-200 px-2.5 py-1.5 text-xs text-gray-700 hover:bg-gray-50"
                     >
-                      {pwVisible ? "Hide" : "Show"}
+                      {pwVisible ? t("actions.hide") : t("actions.show")}
                     </button>
                   </div>
 
@@ -757,9 +735,9 @@ export default function RegisterPage() {
                       />
                     </div>
                     <div className="mt-2 grid grid-cols-3 gap-2 text-[11px] text-gray-600">
-                      <Rule ok={hasMinLen(password)} label="8+ chars" />
-                      <Rule ok={hasUpper(password)} label="1 uppercase" />
-                      <Rule ok={hasNumber(password)} label="1 number" />
+                      <Rule ok={hasMinLen(password)} label={t("pwRules.len")} />
+                      <Rule ok={hasUpper(password)} label={t("pwRules.upper")} />
+                      <Rule ok={hasNumber(password)} label={t("pwRules.number")} />
                     </div>
                   </div>
                 </div>
@@ -771,7 +749,7 @@ export default function RegisterPage() {
                   disabled={registering}
                   className="flex-1 rounded-2xl bg-green-600 text-white px-4 py-3 text-sm font-semibold hover:bg-green-700 active:scale-[0.99] transition disabled:opacity-60"
                 >
-                  {registering ? "Registering…" : "Register & Login"}
+                  {registering ? t("actions.registering") : t("actions.registerLogin")}
                 </button>
                 <button
                   onClick={() => {
@@ -783,7 +761,7 @@ export default function RegisterPage() {
                   type="button"
                   className="rounded-2xl border border-gray-200 px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 active:scale-[0.99] transition"
                 >
-                  Back
+                  {t("actions.back")}
                 </button>
               </div>
             </section>
@@ -792,9 +770,10 @@ export default function RegisterPage() {
 
         {/* Auth toggle helper */}
         <div className="mt-4 text-center text-sm text-gray-600">
-          Already have an account?{" "}
-          <a href="/login" className="text-blue-600 hover:underline">
-            Log in
+          {t("already")}
+          {" "}
+          <a href={`/${locale}/login`} className="text-blue-600 hover:underline">
+            {t("actions.login")}
           </a>
         </div>
       </div>
