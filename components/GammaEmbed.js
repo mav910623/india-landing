@@ -1,19 +1,17 @@
-// src/components/GammaEmbed.jsx
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { useTranslations } from "next-intl";
+import {useEffect, useRef, useState} from "react";
 
 /**
- * Responsive iframe wrapper for Gamma decks (or any external slides).
- *
+ * GammaEmbed (no i18n inside)
  * Props:
- * - src (string): the Gamma share URL (required)
- * - title (string): accessible title for the iframe (optional; falls back to i18n)
- * - ratio (number): aspect ratio width/height (default 16/9)
+ * - src (string)       : deck URL (required)
+ * - title (string)     : iframe title (optional)
+ * - ratio (number)     : width/height (default 16/9)
+ * - missingText (node) : what to show if src is missing
+ * - tipText (string)   : small hint text under the frame
  */
-export default function GammaEmbed({ src, title, ratio = 16 / 9 }) {
-  const t = useTranslations("prelaunch"); // <- read gamma.* from prelaunch namespace
+export default function GammaEmbed({ src, title, ratio = 16 / 9, missingText, tipText }) {
   const boxRef = useRef(null);
   const [height, setHeight] = useState(0);
 
@@ -33,10 +31,7 @@ export default function GammaEmbed({ src, title, ratio = 16 / 9 }) {
   if (!src) {
     return (
       <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
-        {t.rich("gamma.missingSrc", {
-          code: (c) => <span className="font-mono">{c}</span>,
-          strong: (c) => <strong>{c}</strong>,
-        })}
+        {missingText || "Slides link is missing."}
       </div>
     );
   }
@@ -48,15 +43,15 @@ export default function GammaEmbed({ src, title, ratio = 16 / 9 }) {
         style={{ height }}
       >
         <iframe
-          src="https://gamma.app/embed/vab8y6dpmm9ogzi"
-          title={title || t("gamma.title")}
+          src={src}
+          title={title || "Slides"}
           className="w-full h-full"
           loading="lazy"
           referrerPolicy="no-referrer-when-downgrade"
           allow="fullscreen; clipboard-read; clipboard-write"
         />
       </div>
-      <div className="mt-2 text-xs text-gray-500">{t("gamma.tip")}</div>
+      {!!tipText && <div className="mt-2 text-xs text-gray-500">{tipText}</div>}
     </div>
   );
 }

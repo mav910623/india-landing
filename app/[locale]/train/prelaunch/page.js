@@ -1,5 +1,8 @@
 "use client";
 
+export const dynamic = "force-dynamic";
+export const fetchCache = "force-no-store";
+
 import { useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
@@ -9,10 +12,7 @@ import { doc, getDoc, setDoc, updateDoc, serverTimestamp } from "firebase/firest
 import GammaEmbed from "@/components/GammaEmbed";
 import { useTranslations, useLocale } from "next-intl";
 
-/** Page config */
-export const dynamic = "force-dynamic";
-export const fetchCache = "force-no-store";
-
+/** Utility */
 function percentDone(map, total) {
   const done = Array.from({ length: total }).reduce(
     (n, _, i) => (map[String(i)] ? n + 1 : n),
@@ -23,7 +23,6 @@ function percentDone(map, total) {
 
 export default function PrelaunchTrainingPage() {
   const t = useTranslations("prelaunch");
-  const tGamma = useTranslations("prelaunch");
   const locale = useLocale();
   const router = useRouter();
 
@@ -208,8 +207,13 @@ export default function PrelaunchTrainingPage() {
             {t("slides.title")}
           </h2>
           <GammaEmbed
-            src={tGamma("gamma.src")}              // locale-specific URL from messages
-            title={tGamma("gamma.title")}
+            src={t("gamma.src")}
+            title={t("gamma.title")}
+            tipText={t("gamma.tip")}
+            missingText={t.rich("gamma.missingSrc", {
+              code: (c) => <span className="font-mono">{c}</span>,
+              strong: (c) => <strong>{c}</strong>
+            })}
           />
         </section>
 

@@ -9,7 +9,7 @@ const ALL_NAMESPACES = [
   'login',
   'register',
   'dashboard',
-  'prelaunch' // <- keep only this for the prelaunch page (no dotted namespaces)
+  'prelaunch'
 ];
 
 async function loadMessages(locale: string, namespaces: string[]): Promise<Messages> {
@@ -18,17 +18,17 @@ async function loadMessages(locale: string, namespaces: string[]): Promise<Messa
     namespaces.map(async (ns) => {
       try {
         const mod = await import(`../messages/${locale}/${ns}.json`);
-        (out as any)[ns] = (mod as any).default ?? mod;
+        out[ns] = (mod as any).default ?? mod;
       } catch {
         const fallback = await import(`../messages/en/${ns}.json`);
-        (out as any)[ns] = (fallback as any).default ?? fallback;
+        out[ns] = (fallback as any).default ?? fallback;
       }
     })
   );
   return out;
 }
 
-// next-intl v3: only { locale } is available
+// NOTE: In next-intl v3 only { locale } is passed here
 export default getRequestConfig(async ({locale}) => {
   const messages = await loadMessages(locale, ALL_NAMESPACES);
   return {locale, messages};

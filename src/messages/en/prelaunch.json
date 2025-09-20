@@ -1,28 +1,43 @@
 {
-  "title": "Pre-Launch Training",
-  "subtitle": "Quick deck + checklist to get you ready.",
-  "slides": { "title": "Slides" },
-  "checklist": { "title": "Your Checklist" },
-  "chip": { "completed": "Completed", "progress": "{pct}% complete" },
-  "btn": {
-    "markDone": "Mark module as done",
-    "completed": "Completed",
-    "alreadyDoneTitle": "Already completed",
-    "markDoneTitle": "Mark as completed"
-  },
-  "savedHint": "Progress is saved automatically.",
-  "errors": {
-    "load": "Could not load your progress.",
-    "save": "Could not save your progress.",
-    "update": "Could not update status."
-  },
   "loading": "Loading…",
-  "backDashboard": "Back to dashboard",
-  "postLaunchCta": "Next: Sponsor training",
+  "brandAlt": "NuVantage India",
+  "title": "Pre-Launch Training",
+  "subtitle": "A quick walkthrough to get you ready.",
+  "chip": {
+    "completed": "Completed",
+    "progress": "{pct}% complete"
+  },
+  "errors": {
+    "load": "We couldn’t load your progress. Please try again.",
+    "save": "We couldn’t save your progress. Please try again.",
+    "update": "Couldn’t update the module. Please try again."
+  },
+  "slides": {
+    "title": "Slides"
+  },
   "gamma": {
-    "title": "Pre-Launch Deck",
+    "title": "Prelaunch Overview (Slides)",
     "src": "https://gamma.app/embed/vab8y6dpmm9ogzi",
-    "tip": "Use the ⋯ menu on the deck to open full screen.",
-    "missingSrc": "No deck URL set. Add <code>gamma.src</code> in messages or paste a Gamma embed URL."
-  }
+    "tip": "Tip: Open in a new tab for fullscreen.",
+    "missingSrc": "Slides link is missing. Ask your sponsor. Expected key {code}prelaunch.gamma.src{code} in {strong}src/messages/en/prelaunch.json{strong}."
+  },
+  "checklist": {
+    "title": "Checklist"
+  },
+  "steps": {
+    "0": "Watch the full slide deck above",
+    "1": "Note your sponsor’s referral ID",
+    "2": "Set up your NuVantage account",
+    "3": "Join the team WhatsApp group",
+    "4": "Invite your first 3 prospects"
+  },
+  "btn": {
+    "alreadyDoneTitle": "Module already completed",
+    "markDoneTitle": "Mark this module as done",
+    "completed": "Completed",
+    "markDone": "Mark Done"
+  },
+  "savedHint": "Your progress is saved automatically.",
+  "backDashboard": "Back to Dashboard",
+  "postLaunchCta": "Next: Sponsor Training"
 }
