@@ -1,54 +1,45 @@
-// app/layout.js
 import "./globals.css";
+import { NextIntlClientProvider } from "next-intl";
+import { notFound } from "next/navigation";
 
-export const metadata = {
-  title: {
-    default: "NuVantage India",
-    template: "%s | NuVantage India",
-  },
-  description:
-    "NuVantage India Dashboard — Build · Duplicate · Multiply your team with clarity and elegance.",
-  themeColor: "#1e3a8a",
-  openGraph: {
-    title: "NuVantage India",
-    description:
-      "Build · Duplicate · Multiply — grow your team with NuVantage India.",
-    url: "https://your-vercel-domain.vercel.app", // TODO: replace with your real domain
-    siteName: "NuVantage India",
-    images: [
-      {
-        url: "/og-nuvantage.png",
-        width: 1200,
-        height: 630,
-        alt: "NuVantage India Dashboard",
-      },
-    ],
-    locale: "en_US",
-    type: "website",
-  },
-  twitter: {
-    card: "summary_large_image",
-    title: "NuVantage India",
-    description:
-      "Build · Duplicate · Multiply — grow your team with NuVantage India.",
-    images: ["/og-nuvantage.png"],
-  },
-  icons: {
-    icon: [
-      { url: "/favicon.png", type: "image/png", sizes: "48x48" },
-      { url: "/nuvantage-icon.svg", type: "image/svg+xml" },
-    ],
-    apple: [{ url: "/apple-touch-icon.png", sizes: "180x180" }],
-    shortcut: ["/favicon.png"],
-  },
-  applicationName: "NuVantage India",
-  manifest: "/site.webmanifest",
-};
+/**
+ * Supported locales
+ */
+export const locales = ["en", "hi", "ta"];
+export const defaultLocale = "en";
 
-export default function RootLayout({ children }) {
+/**
+ * Generate static params for locales (needed by Next.js App Router)
+ */
+export function generateStaticParams() {
+  return locales.map((locale) => ({ locale }));
+}
+
+/**
+ * Root layout
+ */
+export default async function RootLayout({ children, params }) {
+  const locale = params?.locale || defaultLocale;
+
+  if (!locales.includes(locale)) {
+    notFound();
+  }
+
+  let messages;
+  try {
+    messages = (await import(`../messages/${locale}.json`)).default;
+  } catch (error) {
+    console.error(`No messages for locale "${locale}"`, error);
+    messages = (await import(`../messages/${defaultLocale}.json`)).default;
+  }
+
   return (
-    <html lang="en" className="bg-white">
-      <body>{children}</body>
+    <html lang={locale}>
+      <body className="antialiased">
+        <NextIntlClientProvider locale={locale} messages={messages}>
+          {children}
+        </NextIntlClientProvider>
+      </body>
     </html>
   );
 }
