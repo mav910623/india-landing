@@ -1,8 +1,6 @@
 {
-  "prelaunch.gamma": {
-    "src": "https://gamma.app/embed/y357cp2257rttn4",
-    "title": "ப்ரீலாஞ்ச் பயிற்சி ஸ்லைடுகள்",
-    "missingSrc": "ஸ்லைட்களின் URL இதுவரை அமைக்கப்படவில்லை. {strong}prelaunch.gamma.json{strong} கோப்பில் {code} விசையை சேருங்கள்.",
-    "tip": "குறிப்பு: சிறந்த அனுபவத்திற்குப் முழுத்திரையைப் பயன்படுத்துங்கள்."
-  }
+  "title": "முன்-தொடக்கம் டெக்",
+  "src": "https://gamma.app/embed/y357cp2257rttn4",
+  "tip": "டெக்கின் ⋯ மெனுவில் இருந்து முழுத்திரை திறக்கவும்.",
+  "missingSrc": "டெக் URL அமைக்கப்படவில்லை. <code>prelaunch.gamma.src</code> சேர்க்கவும் அல்லது Gamma embed URL ஒட்டவும்."
 }

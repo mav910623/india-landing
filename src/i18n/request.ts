@@ -3,13 +3,15 @@ import {getRequestConfig} from 'next-intl/server';
 
 type Messages = Record<string, Record<string, unknown>>;
 
+// ✅ Add "prelaunch.gamma" to this list
 const ALL_NAMESPACES = [
   'common',
   'landing',
   'login',
   'register',
   'dashboard',
-  'prelaunch'
+  'prelaunch',
+  'prelaunch.gamma' // <— add this
 ];
 
 async function loadMessages(locale: string, namespaces: string[]): Promise<Messages> {
@@ -28,7 +30,7 @@ async function loadMessages(locale: string, namespaces: string[]): Promise<Messa
   return out;
 }
 
-// NOTE: Only { locale } is available here in next-intl v3
+// next-intl v3 provides only { locale } here
 export default getRequestConfig(async ({locale}) => {
   const messages = await loadMessages(locale, ALL_NAMESPACES);
   return {locale, messages};

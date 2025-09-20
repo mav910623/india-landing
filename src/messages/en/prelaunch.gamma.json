@@ -1,8 +1,6 @@
 {
-  "prelaunch.gamma": {
-    "src": "https://gamma.app/embed/vab8y6dpmm9ogzi",
-    "title": "Prelaunch Training Slides",
-    "missingSrc": "The slides URL is not configured yet. Add a {code} key to {strong}prelaunch.gamma.json{strong}.",
-    "tip": "Tip: Use fullscreen for the best experience."
-  }
+  "title": "Pre-Launch Deck",
+  "src": "https://gamma.app/embed/vab8y6dpmm9ogzi",
+  "tip": "Use the ⋯ menu on the deck to open full screen.",
+  "missingSrc": "No deck URL set. Add <code>prelaunch.gamma.src</code> or paste a Gamma embed URL."
 }
