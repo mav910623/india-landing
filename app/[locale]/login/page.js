@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
 import Image from "next/image";
+import { useRouter, usePathname } from "next/navigation";
 import { auth } from "@/lib/firebase";
 import {
   signInWithEmailAndPassword,
@@ -10,15 +10,51 @@ import {
   onAuthStateChanged,
 } from "firebase/auth";
 import { useTranslations, useLocale } from "next-intl";
-import LocaleSwitcher from "@/components/LocaleSwitcher";
 
 /** Utility */
 const isValidEmail = (e) =>
   /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(e || "").trim());
 
+/** ---- Small, inline language selector (permanent on page) ---- */
+function InlineLangSelect() {
+  const router = useRouter();
+  const pathname = usePathname();
+  const current = useLocale();
+
+  const SUPPORTED = ["en", "hi", "ta"];
+  const labels = { en: "English", hi: "हिन्दी", ta: "தமிழ்" };
+
+  const onChange = (next) => {
+    if (!next || next === current) return;
+    // Replace the /en|/hi|/ta prefix with the chosen locale
+    const newPath = pathname.replace(/^\/(en|hi|ta)(?=\/|$)/, `/${next}`);
+    router.push(newPath);
+  };
+
+  return (
+    <div className="flex justify-end">
+      <label htmlFor="lang" className="sr-only">
+        Language
+      </label>
+      <select
+        id="lang"
+        value={SUPPORTED.includes(current) ? current : "en"}
+        onChange={(e) => onChange(e.target.value)}
+        className="rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
+        aria-label="Language"
+      >
+        {SUPPORTED.map((lc) => (
+          <option key={lc} value={lc}>
+            {labels[lc]}
+          </option>
+        ))}
+      </select>
+    </div>
+  );
+}
+
 export default function LoginPage() {
   const t = useTranslations("login");
-  const locale = useLocale();
   const router = useRouter();
 
   /** Referral capture */
@@ -33,10 +69,10 @@ export default function LoginPage() {
   /** Redirect if signed in */
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, (u) => {
-      if (u) router.push(`/${locale}/dashboard`);
+      if (u) router.push("/dashboard");
     });
     return () => unsub();
-  }, [router, locale]);
+  }, [router]);
 
   /** State */
   const [email, setEmail] = useState("");
@@ -51,8 +87,8 @@ export default function LoginPage() {
   const emailOk = isValidEmail(email);
   const canSubmit = emailOk && password && !loading;
   const registerHref = refId
-    ? `/${locale}/register?ref=${encodeURIComponent(refId)}`
-    : `/${locale}/register`;
+    ? `/register?ref=${encodeURIComponent(refId)}`
+    : "/register";
 
   /** Error translation */
   const friendlyError = (codeOrMsg) => {
@@ -87,7 +123,7 @@ export default function LoginPage() {
     setLoading(true);
     try {
       await signInWithEmailAndPassword(auth, email.trim(), password);
-      router.push(`/${locale}/dashboard`);
+      router.push("/dashboard");
     } catch (err) {
       setError(friendlyError(err.code || err.message));
     } finally {
@@ -113,12 +149,7 @@ export default function LoginPage() {
 
   /** UI */
   return (
-    <div className="min-h-screen bg-gradient-to-b from-sky-50 via-white to-white relative">
-      {/* Permanent language selector (top-right) */}
-      <div className="absolute top-3 right-3 sm:top-6 sm:right-6">
-        <LocaleSwitcher mode="inline" />
-      </div>
-
+    <div className="min-h-screen bg-gradient-to-b from-sky-50 via-white to-white">
       {/* Background ornaments */}
       <div className="pointer-events-none fixed inset-0 -z-10">
         <div className="absolute -top-24 -left-16 h-72 w-72 rounded-full bg-blue-100/40 blur-3xl" />
@@ -127,8 +158,11 @@ export default function LoginPage() {
 
       <div className="mx-auto max-w-md px-4 py-12">
         <div className="rounded-3xl border border-gray-100/80 bg-white/80 backdrop-blur-sm p-7 shadow-xl">
+          {/* ---- Permanent language selector (top of the card) ---- */}
+          <InlineLangSelect />
+
           {/* Brand */}
-          <div className="flex flex-col items-center text-center">
+          <div className="mt-3 flex flex-col items-center text-center">
             <div className="rounded-2xl ring-1 ring-gray-100 shadow-sm p-3 bg-white">
               <Image
                 src="/nuvantage-icon.svg"
