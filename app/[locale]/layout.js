@@ -1,39 +1,44 @@
-
 export const dynamic = "force-dynamic";
 export const fetchCache = "force-no-store";
 
 import "../globals.css";
-import { NextIntlClientProvider } from "next-intl";
-import { notFound } from "next/navigation";
-import { locales, defaultLocale } from "../../i18n";
+import { Inter } from "next/font/google";
+import ClientProviders from "./providers";
 
+const inter = Inter({ subsets: ["latin"] });
 
-// Generate static params for localized routes
-export function generateStaticParams() {
-  return locales.map((locale) => ({ locale }));
+export async function generateMetadata() {
+  return {
+    title: "NuVantage India",
+    description: "Build your India wellness franchise network",
+  };
 }
 
-export default async function LocaleLayout({ children, params }) {
-  const locale = params?.locale || defaultLocale;
+const SUPPORTED = ["en", "hi", "ta"];
 
-  if (!locales.includes(locale)) {
-    notFound();
-  }
-
-  let messages;
+async function loadMessages(locale) {
+  const lang = SUPPORTED.includes(locale) ? locale : "en";
   try {
-    messages = (await import(`../../messages/${locale}.json`)).default;
-  } catch (error) {
-    console.error(`No messages for locale "${locale}"`, error);
-    messages = (await import(`../../messages/${defaultLocale}.json`)).default;
+    const mod = await import(`../../messages/${lang}.json`);
+    return mod.default || mod;
+  } catch (_e) {
+    // Fallback to English if file missing or JSON parse fails
+    const en = await import(`../../messages/en.json`);
+    return en.default || en;
   }
+}
+
+export default async function RootLayout({ children, params }) {
+  const locale = (params?.locale || "en").toLowerCase();
+  const messages = await loadMessages(locale);
 
   return (
-    <html lang={locale}>
-      <body className="antialiased">
-        <NextIntlClientProvider locale={locale} messages={messages}>
+    <html lang={SUPPORTED.includes(locale) ? locale : "en"} className={inter.className}>
+      <body className="bg-white text-gray-900 antialiased">
+        {/* All client-side hooks & translations live below */}
+        <ClientProviders locale={SUPPORTED.includes(locale) ? locale : "en"} messages={messages}>
           {children}
-        </NextIntlClientProvider>
+        </ClientProviders>
       </body>
     </html>
   );
