@@ -12,18 +12,15 @@
     "save": "We couldn’t save your progress. Please try again.",
     "update": "Couldn’t update the module. Please try again."
   },
-  "slides": {
-    "title": "Slides"
-  },
+  "slides": { "title": "Slides" },
   "gamma": {
     "title": "Prelaunch Overview (Slides)",
     "src": "https://gamma.app/embed/vab8y6dpmm9ogzi",
-    "tip": "Tip: Open in a new tab for fullscreen.",
+    "open": "Open in new tab",
+    "tip": "Tip: Click “Open in new tab” if you want fullscreen.",
     "missingSrc": "Slides link is missing. Ask your sponsor. Expected key {code}prelaunch.gamma.src{code} in {strong}src/messages/en/prelaunch.json{strong}."
   },
-  "checklist": {
-    "title": "Checklist"
-  },
+  "checklist": { "title": "Checklist" },
   "steps": {
     "0": "Watch the full slide deck above",
     "1": "Note your sponsor’s referral ID",
