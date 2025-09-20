@@ -48,7 +48,7 @@ export default function GammaEmbed({ src, title, ratio = 16 / 9 }) {
         style={{ height }}
       >
         <iframe
-          src={src}
+          src="https://gamma.app/embed/vab8y6dpmm9ogzi"
           title={title || t("gamma.title")}
           className="w-full h-full"
           loading="lazy"
